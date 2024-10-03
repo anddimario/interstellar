@@ -1,0 +1,33 @@
+package config
+
+import (
+    "log"
+
+    "github.com/spf13/viper"
+)
+
+func InitConfig() {
+    viper.SetConfigName("config") // Name of the config file (without extension)
+    viper.SetConfigType("toml")   // Config file type
+    viper.AddConfigPath(".")      // Path to look for the config file in the current directory
+
+    if err := viper.ReadInConfig(); err != nil {
+        log.Fatalf("Error reading config file, %s", err)
+    }
+
+    validateConfig()
+}
+
+func validateConfig() {
+    if !viper.IsSet("server.address") {
+        log.Fatal("server.address is not set in the config file")
+    }
+
+    if !viper.IsSet("healthcheck.interval") {
+        log.Fatal("healthcheck.interval is not set in the config file")
+    }
+
+    if !viper.IsSet("balancer.backends") {
+        log.Fatal("balancer.backends is not set in the config file")
+    }
+}

@@ -1,0 +1,4 @@
+*.txt
+.env*
+config.toml
+tmp

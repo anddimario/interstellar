@@ -1,0 +1,73 @@
+package balancer
+
+import (
+	"errors"
+	"log"
+	"net/http"
+	"sync"
+	"time"
+)
+
+// HealthlyBackends holds the result of the ticker
+type HealthlyBackends struct {
+	Value []string
+}
+
+var (
+	Result HealthlyBackends
+	mu     sync.Mutex
+	HealthCheckDone   = make(chan bool)
+)
+
+func getHealthlyBackends(backends []string) []string {
+	for _, backend := range backends {
+		req, err := http.NewRequest("GET", backend, nil)
+		if err != nil {
+			log.Println("Error creating request:", err)
+			continue
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("Error sending request:", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		log.Println("Status Code:", resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			Result.Value = append(Result.Value, backend)
+		}
+
+	}
+
+	return Result.Value
+}
+
+func HealthCheck(interval time.Duration, backends []string) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+
+	for {
+		select {
+		case <-t.C:
+			mu.Lock()
+			// log.Printf("Tick at %v", time.Now())
+			Result.Value = getHealthlyBackends(backends)
+			mu.Unlock()
+		case <-HealthCheckDone:
+			return
+		}
+	}
+}
+
+// GetResult safely returns the current value of Result
+func GetBackends() ([]string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+	if len(Result.Value) == 0 {
+		return nil, errors.New("no healthy backends")
+	}
+	return Result.Value, nil
+}
