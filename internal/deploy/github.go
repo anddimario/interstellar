@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	// config "github.com/anddimario/interstellar/internal/config"
+	config "github.com/anddimario/interstellar/internal/config"
 	"github.com/spf13/viper"
 )
 
@@ -17,32 +17,23 @@ var (
 	CheckReleaseDone = make(chan bool)
 )
 
-func downloadRelease(repo string, release string) {
-	fmt.Printf("Last release: %s\n", release)
-	// Command to execute
-	cmd := exec.Command("gh", "release", "download", release, "--repo", repo, "-A", "tar.gz", "--skip-existing", "--dir", "/tmp") // @todo: use config for tmp dir
-	
-    // Create buffers to capture stdout and stderr
-    var stdout, stderr bytes.Buffer
-    cmd.Stdout = &stdout
-    cmd.Stderr = &stderr
+func CheckRelease(deployConfig config.DeployConfig) {
+	t := time.NewTicker(deployConfig.CheckReleaseInterval * time.Minute)
+	defer t.Stop()
 
-	// Run the command without capturing its output
-	err := cmd.Run()
-	if err != nil {
-		log.Printf("Error in download: %s\n", err)
-		log.Printf("Stdout: %s\n", stdout.String())
-        log.Printf("Stderr: %s\n", stderr.String())
-		return
+	for {
+		select {
+		case <-t.C:
+			getLastRelease(deployConfig)
+		case <-CheckReleaseDone:
+			return
+		}
 	}
-	// config.StoreConfig(repo + ".last_release", release)
-
-	go StartDeploy()
 }
 
-func getLastRelease(repo string) {
+func getLastRelease(deployConfig config.DeployConfig) {
 	// Command to execute
-	cmd := exec.Command("gh", "release", "list", "--repo", repo, "--limit", "1")
+	cmd := exec.Command("gh", "release", "list", "--repo", deployConfig.Repo, "--limit", "1")
 
 	// Run the command without capturing its output
 	output, err := cmd.Output()
@@ -54,33 +45,58 @@ func getLastRelease(repo string) {
 	outputString := string(output)
 	releaseInfo := strings.Fields(outputString)
 
-	lastDeployedRelease := viper.GetString(repo + ".last_release")
+	lastDeployedRelease := viper.GetString(deployConfig.Repo + ".last_release")
 
-	switch lastDeployedRelease {
-	case releaseInfo[0]:
+	if lastDeployedRelease == releaseInfo[0] {
 		fmt.Println("No new release")
 		return
-	case "":
-		fmt.Println("First time checking for release")
-		downloadRelease(repo, releaseInfo[0])
-		return
-	default:
-		fmt.Println("New release available")
-		downloadRelease(repo, releaseInfo[0])
-		return
 	}
+	// Could be a new release or a first time release
+	// fmt.Println("New release available")
+	downloadRelease(deployConfig.Repo, releaseInfo[0], deployConfig.ReleasePath, deployConfig.AssetName)
+	decompressRelease(deployConfig.Repo, releaseInfo[0], deployConfig.ReleasePath)
+
+	go StartDeploy(deployConfig.ReleasePath, deployConfig.ExecutableCommand, deployConfig.ExecutableEnv, deployConfig.ExecutableArgs)
+
 }
 
-func CheckRelease(checkReleaseInterval time.Duration, repo string) {
-	t := time.NewTicker(checkReleaseInterval * time.Minute)
-	defer t.Stop()
+func decompressRelease(repo string, release string, releaseFilePath string) {
+	// Decompress the downloaded file
+	releaseFileCompletePath := fmt.Sprintf("%s/%s-%s.tar.gz", releaseFilePath, repo, release)
+	cmd := exec.Command("tar", "-xvf", releaseFileCompletePath, "-C", releaseFilePath)
 
-	for {
-		select {
-		case <-t.C:
-			getLastRelease(repo)
-		case <-CheckReleaseDone:
-			return
-		}
+	// Create buffers to capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Error in decompress: %s\n", err)
+		log.Printf("Stdout: %s\n", stdout.String())
+		log.Printf("Stderr: %s\n", stderr.String())
+		return
+	}
+
+}
+
+func downloadRelease(repo string, release string, releaseFilePath string, assetName string) {
+	// fmt.Printf("Last release: %s\n", release)
+	releaseFileCompletePath := fmt.Sprintf("%s/%s-%s.tar.gz", releaseFilePath, repo, release)
+	// Command to execute
+	cmd := exec.Command("gh", "release", "download", release, "--repo", repo, "--pattern", assetName, "--skip-existing", "--output", releaseFileCompletePath)
+	// cmd := exec.Command("gh", "release", "download", release, "--repo", repo, "-A", "tar.gz", "--skip-existing", "--output", releaseFileCompletePath)
+
+	// Create buffers to capture stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Error in download: %s\n", err)
+		log.Printf("Stdout: %s\n", stdout.String())
+		log.Printf("Stderr: %s\n", stderr.String())
+		return
 	}
 }

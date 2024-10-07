@@ -3,6 +3,7 @@
 ## Features
 
 - monitor and get release from github
+- run executable
 
 ## Install and requirements
 

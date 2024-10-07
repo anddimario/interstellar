@@ -40,12 +40,28 @@ func main() {
 	}()
 	// Start healthcheck
 	healthCheckInterval := viper.GetDuration("healthcheck.interval")
-	go balancer.HealthCheck(healthCheckInterval * time.Second, viper.GetStringSlice("balancer.backends"))
+	go balancer.HealthCheck(healthCheckInterval*time.Second, viper.GetStringSlice("balancer.backends"))
 
 	// Start monitor new releases on github
 	checkReleaseInterval := viper.GetDuration("deploy.check_release_interval")
 	repo := viper.GetString("deploy.repo")
-	go deploy.CheckRelease(checkReleaseInterval, repo)
+	releasePath := viper.GetString("deploy.release_path")
+	assetName := viper.GetString("deploy.asset_name")
+	executableCommand := viper.GetString("deploy.executable_command")
+	executableEnv := viper.GetStringSlice("deploy.executable_env")
+	executableArgs := viper.GetStringSlice("deploy.executable_args")
+
+	deployConfig := config.DeployConfig{
+		CheckReleaseInterval: checkReleaseInterval,
+		Repo:                 repo,
+		ReleasePath:          releasePath,
+		AssetName:            assetName,
+		ExecutableCommand:    executableCommand,
+		ExecutableEnv:        executableEnv,
+		ExecutableArgs:       executableArgs,
+	}
+
+	go deploy.CheckRelease(deployConfig)
 
 	<-ctx.Done()
 

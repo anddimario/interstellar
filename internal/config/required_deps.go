@@ -8,7 +8,7 @@ import (
 
 func CheckRequirements() error {
 	// Program to check
-	programs := []string{"gh", "podman"}
+	programs := []string{"gh"}
 
 	for _, program := range programs {
 

@@ -1,54 +1,62 @@
 package deploy
 
-// import (
-//     "context"
-//     "fmt"
-//     "log"
+import (
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"syscall"
+	// config "github.com/anddimario/interstellar/internal/config"
+)
 
-//     "github.com/containers/podman/v4/pkg/bindings"
-//     "github.com/containers/podman/v4/pkg/bindings/containers"
-// )
+func StartDeploy(releaseFilePath string, executableCommand string, executableEnv []string, executableArgs []string) {
+	executablePath := releaseFilePath + "/" + executableCommand
 
-// func StartDeploy() {
-//     // Create a context
-//     ctx := context.Background()
+	cmd := exec.Command(executablePath, executableArgs...)
 
-//     // Connect to the Podman service
-//     conn, err := bindings.NewConnection(ctx, "unix:///run/podman/podman.sock") // @todo: add to config?
-//     if err != nil {
-//         log.Fatalf("Error connecting to Podman service: %s\n", err)
-//     }
-//     defer conn.Close()
+	// Set the environment variables
+	cmd.Env = append(os.Environ(), executableEnv...)
 
-//     // Define the container configuration
-//     containerConfig := containers.CreateOptions{
-//         Image: "alpine", // @todo: get image from config
-//     }
+	log.Printf("Starting release: %s\n", executablePath)
 
-//     // Create the container
-//     containerID, err := containers.CreateWithSpec(ctx, conn, &containerConfig)
-//     if err != nil {
-//         log.Fatalf("Error creating container: %s\n", err)
-//     }
+	// Configure the command to detach from the parent process
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
 
-//     // Start the container
-//     if err := containers.Start(ctx, conn, containerID, nil); err != nil {
-//         log.Fatalf("Error starting container: %s\n", err)
-//     }
+	// Redirect stdout and stderr to files
+	stdoutFile, err := os.Create("stdout.log") // @todo: use a log package, or define dir in config
+	if err != nil {
+		fmt.Printf("Error creating stdout file: %s\n", err)
+		return
+	}
+	defer stdoutFile.Close()
 
-//     // Wait for the container to finish
-//     if _, err := containers.Wait(ctx, conn, containerID, "stopped"); err != nil {
-//         log.Fatalf("Error waiting for container: %s\n", err)
-//     }
+	stderrFile, err := os.Create("stderr.log") // @todo: use a log package, or define dir in config
+	if err != nil {
+		fmt.Printf("Error creating stderr file: %s\n", err)
+		return
+	}
+	defer stderrFile.Close()
 
-//     // Get the container logs
-//     logs, err := containers.Logs(ctx, conn, containerID, &containers.LogOptions{
-//         Stdout: true,
-//     })
-//     if err != nil {
-//         log.Fatalf("Error getting container logs: %s\n", err)
-//     }
+	cmd.Stdout = stdoutFile
+	cmd.Stderr = stderrFile
 
-//     // Print the container logs
-//     fmt.Println(logs)
-// }
+	// Start the command
+	err = cmd.Start()
+	if err != nil {
+		fmt.Printf("Error starting command: %s\n", err)
+		return
+	}
+
+	// Print the PID of the detached process
+	fmt.Printf("Detached process started with PID %d\n", cmd.Process.Pid)
+
+	postDeploy()
+}
+
+func postDeploy() {
+
+	// config.StoreConfig(repo + ".last_release", release)
+
+}

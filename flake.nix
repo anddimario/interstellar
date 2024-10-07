@@ -15,10 +15,10 @@
           buildInputs = [
             pkgs.go
             pkgs.air
-            pkgs.hurl
+            # pkgs.hurl
             # pkgs.firecracker
             # pkgs.firectl
-            pkgs.podman
+            # pkgs.podman
             pkgs.gh
           ];
           
