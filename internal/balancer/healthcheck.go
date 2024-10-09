@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/anddimario/interstellar/internal/config"
 )
 
 // HealthlyBackends holds the result of the ticker
@@ -70,4 +72,13 @@ func GetBackends() ([]string, error) {
 		return nil, errors.New("no healthy backends")
 	}
 	return Result.Value, nil
+}
+
+// UpdateBackends safely updates the value of Result when a new backend is added
+func UpdateBackends(backends []string) {
+    mu.Lock()
+    defer mu.Unlock()
+    Result.Value = backends
+	// Update the config too to keep it in sync
+	config.StoreConfig("balancer.backends", backends)
 }

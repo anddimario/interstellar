@@ -44,19 +44,20 @@ func getLastRelease(deployConfig config.DeployConfig) {
 
 	outputString := string(output)
 	releaseInfo := strings.Fields(outputString)
+	releaseVersion := releaseInfo[0]
 
 	lastDeployedRelease := viper.GetString(deployConfig.Repo + ".last_release")
 
-	if lastDeployedRelease == releaseInfo[0] {
+	if lastDeployedRelease == releaseVersion {
 		fmt.Println("No new release")
 		return
 	}
 	// Could be a new release or a first time release
 	// fmt.Println("New release available")
-	downloadRelease(deployConfig.Repo, releaseInfo[0], deployConfig.ReleasePath, deployConfig.AssetName)
-	decompressRelease(deployConfig.Repo, releaseInfo[0], deployConfig.ReleasePath)
+	downloadRelease(deployConfig.Repo, releaseVersion, deployConfig.ReleasePath, deployConfig.AssetName)
+	decompressRelease(deployConfig.Repo, releaseVersion, deployConfig.ReleasePath)
 
-	go StartDeploy(deployConfig.ReleasePath, deployConfig.ExecutableCommand, deployConfig.ExecutableEnv, deployConfig.ExecutableArgs)
+	go StartDeploy(deployConfig, releaseVersion)
 
 }
 

@@ -17,7 +17,9 @@
 stateDiagram-v2
     check: Check release
     download: Download new release
-    create_vm: Create new vm
+    choose_port: Choose a port
+    add_backend: Add new process as backend
+    create_vm: Run the process
     canary: Canary
     blue_green: Blue green
     state new_release <<choice>>
@@ -26,7 +28,9 @@ stateDiagram-v2
     check --> new_release
     new_release --> check : No new release
     new_release --> download
-    download --> create_vm
+    download --> choose_port
+    choose_port --> add_backend 
+    add_backend --> create_vm
     create_vm --> deploy_type
     deploy_type --> canary
     deploy_type --> blue_green

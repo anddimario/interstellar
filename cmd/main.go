@@ -24,7 +24,7 @@ func main() {
 
 	// Define server
 	srv := &http.Server{}
-	srv.Addr = viper.GetString("server.address")
+	srv.Addr = viper.GetString("balancer.address")
 	srv.Handler = http.HandlerFunc(balancer.HandleRequest)
 
 	// Define a context to listen for signals
@@ -42,25 +42,8 @@ func main() {
 	healthCheckInterval := viper.GetDuration("healthcheck.interval")
 	go balancer.HealthCheck(healthCheckInterval*time.Second, viper.GetStringSlice("balancer.backends"))
 
-	// Start monitor new releases on github
-	checkReleaseInterval := viper.GetDuration("deploy.check_release_interval")
-	repo := viper.GetString("deploy.repo")
-	releasePath := viper.GetString("deploy.release_path")
-	assetName := viper.GetString("deploy.asset_name")
-	executableCommand := viper.GetString("deploy.executable_command")
-	executableEnv := viper.GetStringSlice("deploy.executable_env")
-	executableArgs := viper.GetStringSlice("deploy.executable_args")
-
-	deployConfig := config.DeployConfig{
-		CheckReleaseInterval: checkReleaseInterval,
-		Repo:                 repo,
-		ReleasePath:          releasePath,
-		AssetName:            assetName,
-		ExecutableCommand:    executableCommand,
-		ExecutableEnv:        executableEnv,
-		ExecutableArgs:       executableArgs,
-	}
-
+	// Start Deploy process
+	deployConfig := config.PrepareDeployConfig()
 	go deploy.CheckRelease(deployConfig)
 
 	<-ctx.Done()

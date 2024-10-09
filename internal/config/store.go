@@ -6,7 +6,7 @@ import (
 	viper "github.com/spf13/viper"
 )
 
-func StoreConfig(name string, value string) {
+func StoreConfig[T any](name string, value T) {
 	
     // Set a configuration value
     viper.Set(name, value)

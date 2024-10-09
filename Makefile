@@ -8,10 +8,10 @@ dev:
 be:
 	docker run -p $(port):$(port) hashicorp/http-echo -listen=:$(port) -text="$(msg)"
 
-.PHONY: test
-test:
-	go test ./...
+# .PHONY: test
+# test:
+# 	go test ./...
 
-.PHONY: coverage
-coverage:
-	go test -v -cover ./...
+# .PHONY: coverage
+# coverage:
+# 	go test -v -cover ./...

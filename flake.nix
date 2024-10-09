@@ -30,6 +30,7 @@
             export GOPATH=$HOME/go
             export PATH=$GOPATH/bin:$PATH
             echo "GOPATH is set to $GOPATH"
+            zsh
             #code .
           '';
 
