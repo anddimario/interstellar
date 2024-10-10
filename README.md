@@ -1,9 +1,12 @@
 # Interstellar
 
+Application deployer
+
 ## Features
 
 - monitor and get release from github
 - run executable
+- blue green deploy
 
 ## Install and requirements
 
@@ -45,4 +48,17 @@ TODO
 
 ### Blue green deploy
 
-TODO
+```mermaid
+stateDiagram-v2
+  wait: Wait positive healthchecks
+  check: Check if healthy
+  replace: Replace old with new
+  not_healthy: Remove new version
+  state is_healthy <<choice>>
+  wait --> check
+  check --> is_healthy
+  is_healthy --> replace : is healthy
+  is_healthy --> not_healthy
+  replace --> [*]
+  not_healthy --> [*]
+```

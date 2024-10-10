@@ -9,9 +9,10 @@ import (
 	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 
-	config "github.com/anddimario/interstellar/internal/config"
 	balancer "github.com/anddimario/interstellar/internal/balancer"
+	config "github.com/anddimario/interstellar/internal/config"
 	"github.com/spf13/viper"
 )
 
@@ -31,13 +32,13 @@ func chooseNextReleasePort() (int, error) {
 		log.Printf("Error executing ss: %s\n", err)
 		return 0, err
 	}
-    // Parse the command output to find the port
-    lines := strings.Split(out.String(), "\n")
-    for _, line := range lines {
-        if strings.Contains(line, string(randomNumber)) {
+	// Parse the command output to find the port
+	lines := strings.Split(out.String(), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, string(randomNumber)) {
 			return chooseNextReleasePort()
 		}
-    }
+	}
 
 	return randomNumber, nil
 }
@@ -52,6 +53,11 @@ func addBackendToConfig(port int) {
 	balancer.UpdateBackends(backends)
 }
 
+func replaceBackendInConfig(newBackends []string) {
+	// add backend to balancer and config
+	balancer.UpdateBackends(newBackends)
+}
+
 func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 
 	processPort, err := chooseNextReleasePort()
@@ -59,8 +65,6 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 		log.Printf("Error choosing port: %s\n", err)
 		return
 	}
-
-	addBackendToConfig(processPort)
 
 	executablePath := deployConfig.ReleasePath + "/" + deployConfig.ExecutableCommand
 
@@ -107,26 +111,54 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	log.Printf("Detached process started with PID %d\n", cmd.Process.Pid)
 
 	if deployConfig.Type == "canary" {
-		canaryDeploy()
-		postDeploy(deployConfig.Repo, releaseVersion)
-		return
+		canaryDeploy(processPort)
+	} else {
+		blueGreenDeploy(processPort)
 	}
 
-	blueGreenDeploy()
 	postDeploy(deployConfig.Repo, releaseVersion)
 
 }
 
-func canaryDeploy() {
+func canaryDeploy(processPort int) {
 
+	addBackendToConfig(processPort)
 }
 
-func blueGreenDeploy() {
+func blueGreenDeploy(processPort int) {
+	// wait for positive health check
+	positiveHealthCheck := viper.GetInt("bluegreen.positive_healthchecks") // @todo: see if inject
+	healthCheckInterval := viper.GetDuration("healthcheck.interval") // @todo: see if inject
+	time.Sleep(time.Duration(positiveHealthCheck) * time.Duration(healthCheckInterval) * time.Second)
+
+	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
+
+	// see if the new version it's healthy (if not close the new version and go to notify)
+	newVersionIsHealthy, err := balancer.GetHealthlyBackend(newBackend)
+	if err != nil {
+		log.Printf("Error checking health of new version: %s\n", err)
+		return
+	}
+
+	if !newVersionIsHealthy {
+		log.Printf("New version is not healthy, removing...\n")
+		// @todo: remove new version
+
+		// @ todo: notify, where?
+		return
+	}
+
+	// replace the backends with the new version
+	replaceBackendInConfig([]string{newBackend})
+
+	// @todo: remove old version
+
+	// @todo: notify, where?
 
 }
 
 func postDeploy(repo string, release string) {
 
-	// config.StoreConfig(repo + ".last_release", release)
+	config.StoreConfig(repo + ".last_release", release)
 
 }

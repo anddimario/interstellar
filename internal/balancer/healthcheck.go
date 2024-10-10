@@ -16,36 +16,10 @@ type HealthlyBackends struct {
 }
 
 var (
-	Result HealthlyBackends
-	mu     sync.Mutex
-	HealthCheckDone   = make(chan bool)
+	Result          HealthlyBackends
+	mu              sync.Mutex
+	HealthCheckDone = make(chan bool)
 )
-
-func getHealthlyBackends(backends []string) []string {
-	for _, backend := range backends {
-		req, err := http.NewRequest("GET", backend, nil)
-		if err != nil {
-			log.Println("Error creating request:", err)
-			continue
-		}
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			log.Println("Error sending request:", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		log.Println("Status Code:", resp.StatusCode)
-		if resp.StatusCode == http.StatusOK {
-			Result.Value = append(Result.Value, backend)
-		}
-
-	}
-
-	return Result.Value
-}
 
 func HealthCheck(interval time.Duration, backends []string) {
 	t := time.NewTicker(interval)
@@ -76,9 +50,58 @@ func GetBackends() ([]string, error) {
 
 // UpdateBackends safely updates the value of Result when a new backend is added
 func UpdateBackends(backends []string) {
-    mu.Lock()
-    defer mu.Unlock()
-    Result.Value = backends
+	mu.Lock()
+	defer mu.Unlock()
+	Result.Value = backends
 	// Update the config too to keep it in sync
 	config.StoreConfig("balancer.backends", backends)
+}
+
+func GetHealthlyBackend(backend string) (bool, error) {
+	req, err := http.NewRequest("GET", backend, nil)
+	if err != nil {
+		log.Println("Error creating request:", err)
+		return false, err
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println("Error sending request:", err)
+		return false, err
+	}
+	defer resp.Body.Close()
+
+	log.Println("Status Code:", resp.StatusCode)
+	if resp.StatusCode == http.StatusOK {
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func getHealthlyBackends(backends []string) []string {
+	for _, backend := range backends {
+		req, err := http.NewRequest("GET", backend, nil)
+		if err != nil {
+			log.Println("Error creating request:", err)
+			continue
+		}
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("Error sending request:", err)
+			continue
+		}
+		defer resp.Body.Close()
+
+		log.Println("Status Code:", resp.StatusCode)
+		if resp.StatusCode == http.StatusOK {
+			Result.Value = append(Result.Value, backend)
+		}
+
+	}
+
+	return Result.Value
 }
