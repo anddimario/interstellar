@@ -16,48 +16,6 @@ import (
 	"github.com/spf13/viper"
 )
 
-func chooseNextReleasePort() (int, error) {
-	// Choose a random port number between 1024 and 65535
-	min := 1024
-	max := 65535
-
-	// Generate a random number within the range
-	randomNumber := rand.Intn(max-min+1) + min
-
-	cmd := exec.Command("ss", "-tuln")
-	var out bytes.Buffer
-	cmd.Stdout = &out
-	err := cmd.Run()
-	if err != nil {
-		log.Printf("Error executing ss: %s\n", err)
-		return 0, err
-	}
-	// Parse the command output to find the port
-	lines := strings.Split(out.String(), "\n")
-	for _, line := range lines {
-		if strings.Contains(line, string(randomNumber)) {
-			return chooseNextReleasePort()
-		}
-	}
-
-	return randomNumber, nil
-}
-
-func addBackendToConfig(port int) {
-	backendUrl := fmt.Sprintf("http://localhost:%d", port)
-
-	backends := viper.GetStringSlice("balancer.backends")
-	backends = append(backends, backendUrl)
-
-	// add backend to balancer and config
-	balancer.UpdateBackends(backends)
-}
-
-func replaceBackendInConfig(newBackends []string) {
-	// add backend to balancer and config
-	balancer.UpdateBackends(newBackends)
-}
-
 func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 
 	processPort, err := chooseNextReleasePort()
@@ -107,16 +65,17 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 		return
 	}
 
+	newProcessPID := cmd.Process.Pid
 	// Print the PID of the detached process
-	log.Printf("Detached process started with PID %d\n", cmd.Process.Pid)
+	log.Printf("Detached process started with PID %d\n", newProcessPID)
 
 	if deployConfig.Type == "canary" {
-		canaryDeploy(processPort)
+		go canaryDeploy(processPort)
 	} else {
-		blueGreenDeploy(processPort)
+		go blueGreenDeploy(processPort, newProcessPID)
 	}
 
-	postDeploy(deployConfig.Repo, releaseVersion)
+	go postDeploy(deployConfig.Repo, releaseVersion)
 
 }
 
@@ -125,10 +84,11 @@ func canaryDeploy(processPort int) {
 	addBackendToConfig(processPort)
 }
 
-func blueGreenDeploy(processPort int) {
+func blueGreenDeploy(processPort int, newProcessPID int) {
+
 	// wait for positive health check
 	positiveHealthCheck := viper.GetInt("bluegreen.positive_healthchecks") // @todo: see if inject
-	healthCheckInterval := viper.GetDuration("healthcheck.interval") // @todo: see if inject
+	healthCheckInterval := viper.GetDuration("healthcheck.interval")       // @todo: see if inject
 	time.Sleep(time.Duration(positiveHealthCheck) * time.Duration(healthCheckInterval) * time.Second)
 
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
@@ -142,16 +102,25 @@ func blueGreenDeploy(processPort int) {
 
 	if !newVersionIsHealthy {
 		log.Printf("New version is not healthy, removing...\n")
-		// @todo: remove new version
+		// remove new version with problems
+		balancer.RemoveProcesses([]int{newProcessPID})
+		
+		// @todo: notify, where?
+		return
+	}
 
-		// @ todo: notify, where?
+	// get old version processes
+	oldVersionProcesses, err := balancer.GetProcessesPID()
+	if err != nil {
+		log.Printf("Error getting old version processes: %s\n", err)
 		return
 	}
 
 	// replace the backends with the new version
 	replaceBackendInConfig([]string{newBackend})
 
-	// @todo: remove old version
+	// kill old version
+	balancer.RemoveProcesses(oldVersionProcesses)
 
 	// @todo: notify, where?
 
@@ -159,6 +128,48 @@ func blueGreenDeploy(processPort int) {
 
 func postDeploy(repo string, release string) {
 
-	config.StoreConfig(repo + ".last_release", release)
+	config.StoreConfig(repo+".last_release", release)
 
+}
+
+func chooseNextReleasePort() (int, error) {
+	// Choose a random port number between 1024 and 65535
+	min := 1024
+	max := 65535
+
+	// Generate a random number within the range
+	randomNumber := rand.Intn(max-min+1) + min
+
+	cmd := exec.Command("ss", "-tuln")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	err := cmd.Run()
+	if err != nil {
+		log.Printf("Error executing ss: %s\n", err)
+		return 0, err
+	}
+	// Parse the command output to find the port
+	lines := strings.Split(out.String(), "\n")
+	for _, line := range lines {
+		if strings.Contains(line, string(randomNumber)) {
+			return chooseNextReleasePort()
+		}
+	}
+
+	return randomNumber, nil
+}
+
+func addBackendToConfig(port int) {
+	backendUrl := fmt.Sprintf("http://localhost:%d", port)
+
+	backends := viper.GetStringSlice("balancer.backends")
+	backends = append(backends, backendUrl)
+
+	// add backend to balancer and config
+	balancer.UpdateBackends(backends)
+}
+
+func replaceBackendInConfig(newBackends []string) {
+	// add backend to balancer and config
+	balancer.UpdateBackends(newBackends)
 }

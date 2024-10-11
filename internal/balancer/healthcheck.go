@@ -21,7 +21,15 @@ var (
 	HealthCheckDone = make(chan bool)
 )
 
-func HealthCheck(interval time.Duration, backends []string) {
+func InitBackendsFromConfig(backends []string) {
+	mu.Lock()
+	Result.Value = backends
+	mu.Unlock()
+
+	// @todo: start here the healthcheck, or check the status?
+}
+
+func HealthCheck(interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
@@ -30,7 +38,8 @@ func HealthCheck(interval time.Duration, backends []string) {
 		case <-t.C:
 			mu.Lock()
 			// log.Printf("Tick at %v", time.Now())
-			Result.Value = getHealthlyBackends(backends)
+			Result.Value = getHealthlyBackends(Result.Value)
+			log.Printf("Healthy backends: %v", Result.Value) // @todo: remove
 			mu.Unlock()
 		case <-HealthCheckDone:
 			return
@@ -53,6 +62,8 @@ func UpdateBackends(backends []string) {
 	mu.Lock()
 	defer mu.Unlock()
 	Result.Value = backends
+	log.Printf("Updated backends: %v", Result.Value) // @todo: remove
+
 	// Update the config too to keep it in sync
 	config.StoreConfig("balancer.backends", backends)
 }
@@ -72,7 +83,7 @@ func GetHealthlyBackend(backend string) (bool, error) {
 	}
 	defer resp.Body.Close()
 
-	log.Println("Status Code:", resp.StatusCode)
+	log.Printf("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}
@@ -81,6 +92,7 @@ func GetHealthlyBackend(backend string) (bool, error) {
 }
 
 func getHealthlyBackends(backends []string) []string {
+	healthyBackends := make([]string, 0)
 	for _, backend := range backends {
 		req, err := http.NewRequest("GET", backend, nil)
 		if err != nil {
@@ -96,12 +108,12 @@ func getHealthlyBackends(backends []string) []string {
 		}
 		defer resp.Body.Close()
 
-		log.Println("Status Code:", resp.StatusCode)
+		log.Printf("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
 		if resp.StatusCode == http.StatusOK {
-			Result.Value = append(Result.Value, backend)
+			healthyBackends = append(healthyBackends, backend)
 		}
 
 	}
 
-	return Result.Value
+	return healthyBackends
 }
