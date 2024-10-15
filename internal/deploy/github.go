@@ -3,7 +3,7 @@ package deploy
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"os/exec"
 	"strings"
 	"time"
@@ -38,7 +38,7 @@ func getLastRelease(deployConfig config.DeployConfig) {
 	// Run the command without capturing its output
 	output, err := cmd.Output()
 	if err != nil {
-		log.Printf("Error: %s\n", err)
+		slog.Error("Error: %s\n", err)
 		return
 	}
 
@@ -73,9 +73,9 @@ func decompressRelease(repo string, release string, releaseFilePath string) {
 
 	err := cmd.Run()
 	if err != nil {
-		log.Printf("Error in decompress: %s\n", err)
-		log.Printf("Stdout: %s\n", stdout.String())
-		log.Printf("Stderr: %s\n", stderr.String())
+		slog.Error("Error in decompress: %s\n", err)
+		slog.Error("Stdout: %s\n", stdout.String())
+		slog.Error("Stderr: %s\n", stderr.String())
 		return
 	}
 
@@ -95,9 +95,9 @@ func downloadRelease(repo string, release string, releaseFilePath string, assetN
 
 	err := cmd.Run()
 	if err != nil {
-		log.Printf("Error in download: %s\n", err)
-		log.Printf("Stdout: %s\n", stdout.String())
-		log.Printf("Stderr: %s\n", stderr.String())
+		slog.Error("Error in download: %s\n", err)
+		slog.Error("Stdout: %s\n", stdout.String())
+		slog.Error("Stderr: %s\n", stderr.String())
 		return
 	}
 }

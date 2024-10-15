@@ -2,7 +2,7 @@ package balancer
 
 import (
 	"errors"
-	"log"
+	"log/slog"
 	"net/http"
 	"sync"
 	"time"
@@ -37,9 +37,8 @@ func HealthCheck(interval time.Duration) {
 		select {
 		case <-t.C:
 			mu.Lock()
-			// log.Printf("Tick at %v", time.Now())
 			Result.Value = getHealthlyBackends(Result.Value)
-			log.Printf("Healthy backends: %v", Result.Value) // @todo: remove
+			slog.Error("Healthy backends", "list", Result.Value) // @todo: remove
 			mu.Unlock()
 		case <-HealthCheckDone:
 			return
@@ -62,7 +61,7 @@ func UpdateBackends(backends []string) {
 	mu.Lock()
 	defer mu.Unlock()
 	Result.Value = backends
-	log.Printf("Updated backends: %v", Result.Value) // @todo: remove
+	slog.Info("Updated backends", "list", Result.Value) // @todo: remove
 
 	// Update the config too to keep it in sync
 	config.StoreConfig("balancer.backends", backends)
@@ -71,19 +70,19 @@ func UpdateBackends(backends []string) {
 func GetHealthlyBackend(backend string) (bool, error) {
 	req, err := http.NewRequest("GET", backend, nil)
 	if err != nil {
-		log.Println("Error creating request:", err)
+		slog.Error("Error creating request", "err", err)
 		return false, err
 	}
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Println("Error sending request:", err)
+		slog.Error("Sending request", "err", err)
 		return false, err
 	}
 	defer resp.Body.Close()
 
-	log.Printf("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
+	slog.Error("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}
@@ -96,19 +95,19 @@ func getHealthlyBackends(backends []string) []string {
 	for _, backend := range backends {
 		req, err := http.NewRequest("GET", backend, nil)
 		if err != nil {
-			log.Println("Error creating request:", err)
+			slog.Error("Error creating request", "err", err)
 			continue
 		}
 
 		client := &http.Client{}
 		resp, err := client.Do(req)
 		if err != nil {
-			log.Println("Error sending request:", err)
+			slog.Error("Sending request", "err", err)
 			continue
 		}
 		defer resp.Body.Close()
 
-		log.Printf("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
+		slog.Error("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
 		if resp.StatusCode == http.StatusOK {
 			healthyBackends = append(healthyBackends, backend)
 		}

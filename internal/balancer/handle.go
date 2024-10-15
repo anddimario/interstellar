@@ -2,32 +2,21 @@ package balancer
 
 import (
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"sync/atomic"
 )
 
-// Index for round-robin selection
-var index uint32
+var (
+	// Index for round-robin selection
+	index uint32
+
+	Canary bool
+)
 
 type Handler struct {
 	backend string
-}
-
-// Select a backend server using round-robin algorithm
-func (h *Handler) getNextBackend() (error) {
-    healthlyBackends, err := GetBackends()
-
-	if err != nil {
-		return err
-	}
-
-	// @todo use round-robin algorithm to select the next backend server, or use a different algorithm
-	// @todo for canary deployment, use a different algorithm to select the backend server, maybe we need to store some data
-	i := atomic.AddUint32(&index, 1)
-	h.backend = healthlyBackends[i%uint32(len(healthlyBackends))]
-	return nil
 }
 
 // HTTP handler to forward requests to backend servers
@@ -35,7 +24,7 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	handlerInfo := Handler{}
 	err := handlerInfo.getNextBackend()
 	if err != nil {
-		log.Println("Error getting next backend:", err)
+		slog.Error("Get next backend", "err", err)
 		http.Error(w, err.Error(), http.StatusBadGateway)
 		return
 	}
@@ -57,7 +46,7 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	// Forward the request to the backend server
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Println("Error forwarding request:", err)
+		slog.Error("Forwarding request", "err", err)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
@@ -69,4 +58,48 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+// Select a backend server using round-robin algorithm
+func (h *Handler) getNextBackend() error {
+	healthlyBackends, err := GetBackends()
+
+	if err != nil {
+		return err
+	}
+
+	// Canary deployment is different from normal deployment
+	if Canary {
+		// @todo
+		slog.Info("Canary deployment in progress") // @todo remove
+		// @todo see if there's a storage that initializes the counters
+		// @todo get the counters
+		// @todo see the new release quotas and check who process the last request
+		// @todo if the last request was processed by the new release, send the request to the old release
+		// @todo if the last request was processed by the old release, check if the new one must process other requests and send the request to the new release, otherwise send to the old release
+		// @todo check if the old release must process other requests, if not, reset the counters
+
+		i := atomic.AddUint32(&index, 1)
+		h.backend = healthlyBackends[i%uint32(len(healthlyBackends))]
+		return nil
+	} else {
+		// @todo see if use different algorithms
+		i := atomic.AddUint32(&index, 1)
+		h.backend = healthlyBackends[i%uint32(len(healthlyBackends))]
+		return nil
+	}
+}
+
+func ManageCanaryDeployInProgress() {
+
+	// @todo: mutex?
+	Canary = true
+
+}
+
+func ManageCanaryDeployCompleted() {
+	// @todo reset the canary counters and release the mutex (use mutex)
+
+	Canary = false
+
 }

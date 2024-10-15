@@ -44,7 +44,22 @@ stateDiagram-v2
 
 ### Canary deploy
 
-TODO
+```mermaid
+stateDiagram-v2
+  wait: Wait canary window
+  check: Check if healthy
+  add: Add the new version
+  not_healthy: Remove new version
+  remove_old: Remove old version
+  state is_healthy <<choice>>
+  check --> is_healthy
+  is_healthy --> add : is healthy
+  is_healthy --> not_healthy
+  add --> wait
+  wait --> remove_old
+  not_healthy --> [*]
+  remove_old --> [*]
+```
 
 ### Blue green deploy
 

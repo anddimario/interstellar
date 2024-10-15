@@ -3,11 +3,12 @@ package deploy
 import (
 	"bytes"
 	"fmt"
-	"log"
+	"log/slog"
 	"math/rand"
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,11 +17,29 @@ import (
 	"github.com/spf13/viper"
 )
 
+var (
+	Canary     bool
+	inProgress bool
+	mu         sync.Mutex
+)
+
 func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
+
+	mu.Lock()
+	if inProgress {
+		slog.Warn("Deploy in progress, skipping...\n")
+		mu.Unlock()
+		return
+	}
+	inProgress = true
+
+	if deployConfig.Type == "canary" {
+		balancer.ManageCanaryDeployInProgress()
+	}
 
 	processPort, err := chooseNextReleasePort()
 	if err != nil {
-		log.Printf("Error choosing port: %s\n", err)
+		slog.Error("Choosing port", "err", err)
 		return
 	}
 
@@ -33,7 +52,7 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	// Set the environment variables
 	cmd.Env = append(os.Environ(), processEnvVariable...)
 
-	log.Printf("Starting release: %s\n", executablePath)
+	slog.Info("Starting release", "command", executablePath)
 
 	// Configure the command to detach from the parent process
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -43,14 +62,14 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	// Redirect stdout and stderr to files
 	stdoutFile, err := os.Create("stdout.log") // @todo: use a log package, or define dir in config
 	if err != nil {
-		log.Printf("Error creating stdout file: %s\n", err)
+		slog.Error("Creating stdout file", "err", err)
 		return
 	}
 	defer stdoutFile.Close()
 
 	stderrFile, err := os.Create("stderr.log") // @todo: use a log package, or define dir in config
 	if err != nil {
-		log.Printf("Error creating stderr file: %s\n", err)
+		slog.Error("Creating stderr file", "err", err)
 		return
 	}
 	defer stderrFile.Close()
@@ -61,16 +80,16 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	// Start the command
 	err = cmd.Start()
 	if err != nil {
-		log.Printf("Error starting command: %s\n", err)
+		slog.Error("Starting command", "err", err)
 		return
 	}
 
 	newProcessPID := cmd.Process.Pid
 	// Print the PID of the detached process
-	log.Printf("Detached process started with PID %d\n", newProcessPID)
+	slog.Info("Detached process started with PID", "pid", newProcessPID)
 
 	if deployConfig.Type == "canary" {
-		go canaryDeploy(processPort)
+		go canaryDeploy(processPort, newProcessPID)
 	} else {
 		go blueGreenDeploy(processPort, newProcessPID)
 	}
@@ -79,9 +98,44 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 
 }
 
-func canaryDeploy(processPort int) {
+func canaryDeploy(processPort int, newProcessPID int) {
+	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
+
+	// see if the new version it's healthy (if not close the new version and go to notify)
+	newVersionIsHealthy, err := balancer.GetHealthlyBackend(newBackend)
+	if err != nil {
+		slog.Error("Checking health of new version", "err", err)
+		return
+	}
+
+	if !newVersionIsHealthy {
+		slog.Error("New version is not healthy, removing...")
+		// remove new version with problems
+		balancer.RemoveProcesses([]int{newProcessPID})
+
+		// @todo: notify, where?
+		return
+	}
+
+	// get old version processes
+	oldVersionProcessesPID, err := balancer.GetProcessesPID()
+	if err != nil {
+		slog.Error("Getting old version processes", "err", err)
+		return
+	}
 
 	addBackendToConfig(processPort)
+
+	// use a timer timeout that wait until the window time is over and compleate the deploy
+	canaryWaitWindow := viper.GetDuration("canary.wait_window_in_min") // @todo: see if inject
+	t := time.NewTimer(canaryWaitWindow * time.Minute)
+
+	<-t.C
+	// remove the old version
+	balancer.RemoveProcesses(oldVersionProcessesPID)
+
+	balancer.ManageCanaryDeployCompleted()
+	slog.Error("Canary deploy completed\n")
 }
 
 func blueGreenDeploy(processPort int, newProcessPID int) {
@@ -96,23 +150,23 @@ func blueGreenDeploy(processPort int, newProcessPID int) {
 	// see if the new version it's healthy (if not close the new version and go to notify)
 	newVersionIsHealthy, err := balancer.GetHealthlyBackend(newBackend)
 	if err != nil {
-		log.Printf("Error checking health of new version: %s\n", err)
+		slog.Error("Checking health of new version", "err", err)
 		return
 	}
 
 	if !newVersionIsHealthy {
-		log.Printf("New version is not healthy, removing...\n")
+		slog.Warn("New version is not healthy, removing...")
 		// remove new version with problems
 		balancer.RemoveProcesses([]int{newProcessPID})
-		
+
 		// @todo: notify, where?
 		return
 	}
 
 	// get old version processes
-	oldVersionProcesses, err := balancer.GetProcessesPID()
+	oldVersionProcessesPID, err := balancer.GetProcessesPID()
 	if err != nil {
-		log.Printf("Error getting old version processes: %s\n", err)
+		slog.Error("Getting old version processes", "err", err)
 		return
 	}
 
@@ -120,7 +174,7 @@ func blueGreenDeploy(processPort int, newProcessPID int) {
 	replaceBackendInConfig([]string{newBackend})
 
 	// kill old version
-	balancer.RemoveProcesses(oldVersionProcesses)
+	balancer.RemoveProcesses(oldVersionProcessesPID)
 
 	// @todo: notify, where?
 
@@ -130,6 +184,9 @@ func postDeploy(repo string, release string) {
 
 	config.StoreConfig(repo+".last_release", release)
 
+	mu.Lock()
+	inProgress = false
+	mu.Unlock()
 }
 
 func chooseNextReleasePort() (int, error) {
@@ -145,7 +202,7 @@ func chooseNextReleasePort() (int, error) {
 	cmd.Stdout = &out
 	err := cmd.Run()
 	if err != nil {
-		log.Printf("Error executing ss: %s\n", err)
+		slog.Error("Executing ss to choose release port", "err", err)
 		return 0, err
 	}
 	// Parse the command output to find the port
@@ -172,4 +229,10 @@ func addBackendToConfig(port int) {
 func replaceBackendInConfig(newBackends []string) {
 	// add backend to balancer and config
 	balancer.UpdateBackends(newBackends)
+}
+
+func CheckIfDeployInProgress() bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return inProgress
 }

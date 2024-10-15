@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"log/slog"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -33,7 +34,7 @@ func main() {
 
 	// Start the server
 	go func() {
-		log.Printf("Load balancer starting on %s", srv.Addr)
+		slog.Info("Load balancer starting", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatal(err)
 		}
@@ -41,7 +42,7 @@ func main() {
 	// Start healthcheck
 	healthCheckInterval := viper.GetDuration("healthcheck.interval")
 	balancer.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
-	go balancer.HealthCheck(healthCheckInterval*time.Second)
+	go balancer.HealthCheck(healthCheckInterval * time.Second)
 
 	// Start Deploy process
 	deployConfig := config.PrepareDeployConfig()
@@ -49,9 +50,9 @@ func main() {
 
 	<-ctx.Done()
 
-	log.Println("got interruption signal")
+	slog.Info("Got interruption signal")
 	if err := srv.Shutdown(context.TODO()); err != nil {
-		log.Printf("server shutdown returned an err: %v\n", err)
+		slog.Error("server shutdown returned an error", "err", err)
 	}
 
 	// Stop healthcheck
@@ -59,5 +60,5 @@ func main() {
 	// Stop monitor new releases on github
 	deploy.CheckReleaseDone <- true
 
-	log.Println("Bye!")
+	slog.Info("Bye!")
 }

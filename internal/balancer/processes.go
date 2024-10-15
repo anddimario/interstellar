@@ -3,7 +3,7 @@ package balancer
 import (
 	"bytes"
 	"errors"
-	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"regexp"
@@ -25,11 +25,10 @@ func GetProcessesPID() ([]int, error) {
 	for _, backend := range backends {
 		pid, err := getPID(backend)
 		if err != nil {
-			log.Printf("Error parsing PID from backend URL: %s\n", err)
+			slog.Error("Parsing PID from backend URL", "err", err)
 			return nil, err
 		}
 
-		log.Printf("Found process with pid %d\n", pid) // @todo: remove
 		// Append the PID to the slice
 		pids = append(pids, pid)
 	}
@@ -42,18 +41,18 @@ func RemoveProcesses(pids []int) {
 		// Find the process by its PID
 		process, err := os.FindProcess(pid)
 		if err != nil {
-			log.Printf("Error finding process with pid %d: %s\n", pid, err)
+			slog.Error("Process not found", "pid", pid, "err", err)
 			return
 		}
 
 		// Send a termination signal to the process
 		if err := process.Signal(syscall.SIGTERM); err != nil {
-			log.Printf("Error sending termination signal for process with pid %d: %s\n", pid, err)
+			slog.Error("Sending termination signal for process", "pid", pid, "err", err)
 			return
 		}
 
 		// Print a message indicating that the process was terminated
-		log.Printf("Process with pid %d terminated", pid)
+		slog.Info("Process terminated", "pid", pid)
 	}
 }
 
@@ -74,7 +73,7 @@ func getPID(backend string) (int, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		log.Printf("Error executing ss: %s\n", err)
+		slog.Error("Executing ss to get PID", "err", err)
 		return 0, err
 	}
 
@@ -82,7 +81,6 @@ func getPID(backend string) (int, error) {
 	lines := strings.Split(out.String(), "\n")
 	for _, line := range lines {
 		if strings.Contains(line, string(port)) {
-			log.Printf("Found line: %s\n", line) // @todo: remove
 			// Use a regular expression to extract the PID
 			re := regexp.MustCompile(`pid=(\d+)`)
 			matches := re.FindStringSubmatch(line)
