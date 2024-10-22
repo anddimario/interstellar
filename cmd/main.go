@@ -39,9 +39,10 @@ func main() {
 			log.Fatal(err)
 		}
 	}()
+
 	// Start healthcheck
 	healthCheckInterval := viper.GetDuration("healthcheck.interval")
-	balancer.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
+	go balancer.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
 	go balancer.HealthCheck(healthCheckInterval * time.Second)
 
 	// Start Deploy process

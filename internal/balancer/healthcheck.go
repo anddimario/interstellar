@@ -10,23 +10,21 @@ import (
 	"github.com/anddimario/interstellar/internal/config"
 )
 
-// HealthlyBackends holds the result of the ticker
-type HealthlyBackends struct {
+// healthyBackends holds the result of the ticker
+type healthyBackends struct {
 	Value []string
+	mu    sync.Mutex
 }
 
 var (
-	Result          HealthlyBackends
-	mu              sync.Mutex
+	Result          healthyBackends
 	HealthCheckDone = make(chan bool)
 )
 
 func InitBackendsFromConfig(backends []string) {
-	mu.Lock()
+	Result.mu.Lock()
+	defer Result.mu.Unlock()
 	Result.Value = backends
-	mu.Unlock()
-
-	// @todo: start here the healthcheck, or check the status?
 }
 
 func HealthCheck(interval time.Duration) {
@@ -36,10 +34,10 @@ func HealthCheck(interval time.Duration) {
 	for {
 		select {
 		case <-t.C:
-			mu.Lock()
-			Result.Value = getHealthlyBackends(Result.Value)
-			slog.Error("Healthy backends", "list", Result.Value) // @todo: remove
-			mu.Unlock()
+			Result.mu.Lock()
+			Result.Value = GetHealthyBackends(Result.Value)
+			slog.Info("Healthy backends", "list", Result.Value) // @todo: remove
+			Result.mu.Unlock()
 		case <-HealthCheckDone:
 			return
 		}
@@ -48,8 +46,8 @@ func HealthCheck(interval time.Duration) {
 
 // GetResult safely returns the current value of Result
 func GetBackends() ([]string, error) {
-	mu.Lock()
-	defer mu.Unlock()
+	Result.mu.Lock()
+	defer Result.mu.Unlock()
 	if len(Result.Value) == 0 {
 		return nil, errors.New("no healthy backends")
 	}
@@ -58,8 +56,8 @@ func GetBackends() ([]string, error) {
 
 // UpdateBackends safely updates the value of Result when a new backend is added
 func UpdateBackends(backends []string) {
-	mu.Lock()
-	defer mu.Unlock()
+	Result.mu.Lock()
+	defer Result.mu.Unlock()
 	Result.Value = backends
 	slog.Info("Updated backends", "list", Result.Value) // @todo: remove
 
@@ -67,7 +65,7 @@ func UpdateBackends(backends []string) {
 	config.StoreConfig("balancer.backends", backends)
 }
 
-func GetHealthlyBackend(backend string) (bool, error) {
+func GetHealthyBackend(backend string) (bool, error) {
 	req, err := http.NewRequest("GET", backend, nil)
 	if err != nil {
 		slog.Error("Error creating request", "err", err)
@@ -82,7 +80,7 @@ func GetHealthlyBackend(backend string) (bool, error) {
 	}
 	defer resp.Body.Close()
 
-	slog.Error("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
+	slog.Info("HealthCheck Status Code", "backend", backend, "status", resp.StatusCode) // @todo: remove
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}
@@ -90,28 +88,30 @@ func GetHealthlyBackend(backend string) (bool, error) {
 	return false, nil
 }
 
-func getHealthlyBackends(backends []string) []string {
+func GetHealthyBackends(backends []string) []string {
+
 	healthyBackends := make([]string, 0)
+	needReplaceInConfig := false
+
 	for _, backend := range backends {
-		req, err := http.NewRequest("GET", backend, nil)
-		if err != nil {
-			slog.Error("Error creating request", "err", err)
-			continue
-		}
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			slog.Error("Sending request", "err", err)
-			continue
-		}
-		defer resp.Body.Close()
-
-		slog.Error("HealthCheck Status Code for %s: %d", backend, resp.StatusCode)
-		if resp.StatusCode == http.StatusOK {
+		if ok, _ := GetHealthyBackend(backend); ok {
 			healthyBackends = append(healthyBackends, backend)
+		} else {
+			// check if the process is still running, if not remove from the list
+			processPID, err := GetProcessPID(backend)
+			if err != nil {
+				slog.Error("Parsing PID from backend URL", "err", err)
+			}
+			if processPID == 0 {
+				// Remove the backend from the list
+				slog.Info("Removing unhealthy backend", "backend", backend)
+				needReplaceInConfig = true
+			}
 		}
+	}
 
+	if needReplaceInConfig {
+		config.StoreConfig("balancer.backends", healthyBackends)
 	}
 
 	return healthyBackends

@@ -23,7 +23,7 @@ func GetProcessesPID() ([]int, error) {
 
 	// Iterate over the backends to extract the PIDs
 	for _, backend := range backends {
-		pid, err := getPID(backend)
+		pid, err := GetProcessPID(backend)
 		if err != nil {
 			slog.Error("Parsing PID from backend URL", "err", err)
 			return nil, err
@@ -56,7 +56,7 @@ func RemoveProcesses(pids []int) {
 	}
 }
 
-func getPID(backend string) (int, error) {
+func GetProcessPID(backend string) (int, error) {
 
 	parts := strings.Split(backend, ":")
 

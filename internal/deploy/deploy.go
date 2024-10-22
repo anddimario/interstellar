@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -18,7 +19,6 @@ import (
 )
 
 var (
-	Canary     bool
 	inProgress bool
 	mu         sync.Mutex
 )
@@ -32,10 +32,6 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 		return
 	}
 	inProgress = true
-
-	if deployConfig.Type == "canary" {
-		balancer.ManageCanaryDeployInProgress()
-	}
 
 	processPort, err := chooseNextReleasePort()
 	if err != nil {
@@ -99,10 +95,17 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 }
 
 func canaryDeploy(processPort int, newProcessPID int) {
+	balancer.ManageCanaryDeployInProgress()
+
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
 
+	// wait for the new version to start
+	waitStartup := viper.GetInt("canary.wait_startup_in_sec") // @todo: see if inject
+	time.Sleep(time.Duration(waitStartup) * time.Second)
+
 	// see if the new version it's healthy (if not close the new version and go to notify)
-	newVersionIsHealthy, err := balancer.GetHealthlyBackend(newBackend)
+	newVersionIsHealthy, err := balancer.GetHealthyBackend(newBackend)
+	log.Printf("newVersionIsHealthy: %v", newVersionIsHealthy) // @todo: remove
 	if err != nil {
 		slog.Error("Checking health of new version", "err", err)
 		return
@@ -116,6 +119,9 @@ func canaryDeploy(processPort int, newProcessPID int) {
 		// @todo: notify, where?
 		return
 	}
+
+	// set the backends for the canary deploy
+	balancer.AddCanaryBackend(newBackend)
 
 	// get old version processes
 	oldVersionProcessesPID, err := balancer.GetProcessesPID()
@@ -135,7 +141,6 @@ func canaryDeploy(processPort int, newProcessPID int) {
 	balancer.RemoveProcesses(oldVersionProcessesPID)
 
 	balancer.ManageCanaryDeployCompleted()
-	slog.Error("Canary deploy completed\n")
 }
 
 func blueGreenDeploy(processPort int, newProcessPID int) {
@@ -148,7 +153,7 @@ func blueGreenDeploy(processPort int, newProcessPID int) {
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
 
 	// see if the new version it's healthy (if not close the new version and go to notify)
-	newVersionIsHealthy, err := balancer.GetHealthlyBackend(newBackend)
+	newVersionIsHealthy, err := balancer.GetHealthyBackend(newBackend)
 	if err != nil {
 		slog.Error("Checking health of new version", "err", err)
 		return

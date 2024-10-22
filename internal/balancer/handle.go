@@ -2,21 +2,36 @@ package balancer
 
 import (
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sync"
 	"sync/atomic"
+
+	"github.com/spf13/viper"
 )
 
 var (
 	// Index for round-robin selection
 	index uint32
 
-	Canary bool
+	// muCanarytex for canary deployment
+	muCanary sync.Mutex
+
+	ResultCanary CanaryInfo
 )
 
 type Handler struct {
 	backend string
+}
+
+type CanaryInfo struct {
+	NewReleaseProcessedRequests int
+	TotalProcessedRequests      int
+	InProgress                  bool
+	NewIsLastUsedBacked         bool // used to allow the request to split
+	Backends                    []string
 }
 
 // HTTP handler to forward requests to backend servers
@@ -62,44 +77,91 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 // Select a backend server using round-robin algorithm
 func (h *Handler) getNextBackend() error {
-	healthlyBackends, err := GetBackends()
+	healthyBackends, err := GetBackends()
 
 	if err != nil {
 		return err
 	}
 
+	canaryStatus := getCanaryDeployStatus()
+	log.Printf("canaryStatus: %v", canaryStatus) // @todo remove
 	// Canary deployment is different from normal deployment
-	if Canary {
-		// @todo
-		slog.Info("Canary deployment in progress") // @todo remove
-		// @todo see if there's a storage that initializes the counters
-		// @todo get the counters
-		// @todo see the new release quotas and check who process the last request
-		// @todo if the last request was processed by the new release, send the request to the old release
-		// @todo if the last request was processed by the old release, check if the new one must process other requests and send the request to the new release, otherwise send to the old release
-		// @todo check if the old release must process other requests, if not, reset the counters
-
-		i := atomic.AddUint32(&index, 1)
-		h.backend = healthlyBackends[i%uint32(len(healthlyBackends))]
-		return nil
+	if canaryStatus.InProgress {
+		h.backend, err = canaryStatus.getCanaryBackend(healthyBackends)
+		if err != nil {
+			return err
+		}
 	} else {
 		// @todo see if use different algorithms
 		i := atomic.AddUint32(&index, 1)
-		h.backend = healthlyBackends[i%uint32(len(healthlyBackends))]
-		return nil
+		h.backend = healthyBackends[i%uint32(len(healthyBackends))]
 	}
+	return nil
 }
 
 func ManageCanaryDeployInProgress() {
-
-	// @todo: mutex?
-	Canary = true
+	slog.Info("Canary deploy in progress\n")
+	muCanary.Lock()
+	defer muCanary.Unlock()
+	ResultCanary = CanaryInfo{
+		InProgress:                  true,
+		NewReleaseProcessedRequests: 0,
+		TotalProcessedRequests:      0,
+	}
 
 }
 
 func ManageCanaryDeployCompleted() {
-	// @todo reset the canary counters and release the mutex (use mutex)
+	muCanary.Lock()
+	defer muCanary.Unlock()
 
-	Canary = false
+	// @todo reset the canary counters
+	ResultCanary.InProgress = false
+	ResultCanary.NewReleaseProcessedRequests = 0
+	ResultCanary.TotalProcessedRequests = 0
+	ResultCanary.Backends = nil
+	ResultCanary.NewIsLastUsedBacked = false 
 
+	slog.Info("Canary deploy completed\n")
+}
+
+func AddCanaryBackend(newReleaseBackend string) {
+	muCanary.Lock()
+	defer muCanary.Unlock()
+
+	ResultCanary.Backends = append(ResultCanary.Backends, newReleaseBackend)
+}
+
+func getCanaryDeployStatus() CanaryInfo {
+	muCanary.Lock()
+	defer muCanary.Unlock()
+	return ResultCanary
+}
+
+func (canaryInfo *CanaryInfo) getCanaryBackend(healthyBackends []string) (string, error) {
+	muCanary.Lock()
+	defer muCanary.Unlock()
+
+	newReleaseQuota := viper.GetInt("canary.new_release_quota") // @todo inject this value to avoid viper at each request
+
+	canaryInfo.TotalProcessedRequests++
+	log.Printf("canaryInfo: %v", canaryInfo)
+
+	// @todo redefine the algorithm?
+	// reset the counter if the quota is reached
+	if canaryInfo.TotalProcessedRequests >= 100 {
+		canaryInfo.NewReleaseProcessedRequests = 0
+		canaryInfo.TotalProcessedRequests = 0
+	}
+
+	if canaryInfo.NewReleaseProcessedRequests < newReleaseQuota && len(canaryInfo.Backends) > 0 && !canaryInfo.NewIsLastUsedBacked {
+		// Use this to allow the request to split
+		canaryInfo.NewIsLastUsedBacked = true
+		canaryInfo.NewReleaseProcessedRequests++
+		i := atomic.AddUint32(&index, 1)
+		return canaryInfo.Backends[i%uint32(len(canaryInfo.Backends))], nil
+	} else {
+		i := atomic.AddUint32(&index, 1)
+		return healthyBackends[i%uint32(len(healthyBackends))], nil
+	}
 }

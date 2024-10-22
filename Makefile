@@ -1,4 +1,4 @@
-.PHONY: dev
+ù.PHONY: dev
 dev:
 	air -c .air.toml
 
@@ -15,3 +15,11 @@ be:
 # .PHONY: coverage
 # coverage:
 # 	go test -v -cover ./...
+
+.PHONY: load
+load:
+	siege -c 10 -t 1m http://localhost:8080
+
+.PHONY: vuln
+vuln:
+	govulncheck ./...

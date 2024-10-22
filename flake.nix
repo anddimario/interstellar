@@ -20,6 +20,7 @@
             # pkgs.firectl
             # pkgs.podman
             pkgs.gh
+            pkgs.siege
           ];
           
           shellHook = ''
