@@ -18,7 +18,7 @@ be:
 
 .PHONY: load
 load:
-	siege -c 10 -t 1m http://localhost:8080
+	siege -c 5 -t 1m http://localhost:8080
 
 .PHONY: vuln
 vuln:

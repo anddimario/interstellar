@@ -83,11 +83,9 @@ func (h *Handler) getNextBackend() error {
 		return err
 	}
 
-	canaryStatus := getCanaryDeployStatus()
-	log.Printf("canaryStatus: %v", canaryStatus) // @todo remove
 	// Canary deployment is different from normal deployment
-	if canaryStatus.InProgress {
-		h.backend, err = canaryStatus.getCanaryBackend(healthyBackends)
+	if ResultCanary.InProgress {
+		h.backend, err = getCanaryBackend(healthyBackends)
 		if err != nil {
 			return err
 		}
@@ -138,29 +136,30 @@ func getCanaryDeployStatus() CanaryInfo {
 	return ResultCanary
 }
 
-func (canaryInfo *CanaryInfo) getCanaryBackend(healthyBackends []string) (string, error) {
+func getCanaryBackend(healthyBackends []string) (string, error) {
 	muCanary.Lock()
 	defer muCanary.Unlock()
 
 	newReleaseQuota := viper.GetInt("canary.new_release_quota") // @todo inject this value to avoid viper at each request
 
-	canaryInfo.TotalProcessedRequests++
-	log.Printf("canaryInfo: %v", canaryInfo)
+	ResultCanary.TotalProcessedRequests++
+	log.Printf("canaryInfo: %v", ResultCanary)
 
 	// @todo redefine the algorithm?
 	// reset the counter if the quota is reached
-	if canaryInfo.TotalProcessedRequests >= 100 {
-		canaryInfo.NewReleaseProcessedRequests = 0
-		canaryInfo.TotalProcessedRequests = 0
+	if ResultCanary.TotalProcessedRequests >= 100 {
+		ResultCanary.NewReleaseProcessedRequests = 0
+		ResultCanary.TotalProcessedRequests = 0
 	}
 
-	if canaryInfo.NewReleaseProcessedRequests < newReleaseQuota && len(canaryInfo.Backends) > 0 && !canaryInfo.NewIsLastUsedBacked {
+	if ResultCanary.NewReleaseProcessedRequests < newReleaseQuota && len(ResultCanary.Backends) > 0 && !ResultCanary.NewIsLastUsedBacked {
 		// Use this to allow the request to split
-		canaryInfo.NewIsLastUsedBacked = true
-		canaryInfo.NewReleaseProcessedRequests++
+		ResultCanary.NewIsLastUsedBacked = true
+		ResultCanary.NewReleaseProcessedRequests++
 		i := atomic.AddUint32(&index, 1)
-		return canaryInfo.Backends[i%uint32(len(canaryInfo.Backends))], nil
+		return ResultCanary.Backends[i%uint32(len(ResultCanary.Backends))], nil
 	} else {
+		ResultCanary.NewIsLastUsedBacked = false
 		i := atomic.AddUint32(&index, 1)
 		return healthyBackends[i%uint32(len(healthyBackends))], nil
 	}
