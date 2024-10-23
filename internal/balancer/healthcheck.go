@@ -16,18 +16,26 @@ type healthyBackends struct {
 	mu    sync.Mutex
 }
 
+type HealthCheckConfig struct {
+	Interval time.Duration
+	Path     string
+}
+
 var (
+	healthCheckConfig HealthCheckConfig
 	Result          healthyBackends
 	HealthCheckDone = make(chan bool)
 )
 
-func InitBackendsFromConfig(backends []string) {
+func (c HealthCheckConfig) InitBackendsFromConfig(backends []string) {
 	Result.mu.Lock()
 	defer Result.mu.Unlock()
 	Result.Value = backends
+	healthCheckConfig = c
+	go healthCheck(c.Interval * time.Second)
 }
 
-func HealthCheck(interval time.Duration) {
+func healthCheck(interval time.Duration) {
 	t := time.NewTicker(interval)
 	defer t.Stop()
 
@@ -66,7 +74,9 @@ func UpdateBackends(backends []string) {
 }
 
 func GetHealthyBackend(backend string) (bool, error) {
-	req, err := http.NewRequest("GET", backend, nil)
+	completeBackendPath := backend + healthCheckConfig.Path
+
+	req, err := http.NewRequest("GET", completeBackendPath, nil)
 	if err != nil {
 		slog.Error("Error creating request", "err", err)
 		return false, err
@@ -80,7 +90,7 @@ func GetHealthyBackend(backend string) (bool, error) {
 	}
 	defer resp.Body.Close()
 
-	slog.Info("HealthCheck Status Code", "backend", backend, "status", resp.StatusCode) // @todo: remove
+	slog.Info("HealthCheck Status Code", "backend", completeBackendPath, "status", resp.StatusCode) // @todo: remove
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}

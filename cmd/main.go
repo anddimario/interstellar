@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os/signal"
 	"syscall"
-	"time"
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
 	config "github.com/anddimario/interstellar/internal/config"
@@ -41,9 +40,11 @@ func main() {
 	}()
 
 	// Start healthcheck
-	healthCheckInterval := viper.GetDuration("healthcheck.interval")
-	go balancer.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
-	go balancer.HealthCheck(healthCheckInterval * time.Second)
+	healthCheckConfig := balancer.HealthCheckConfig{
+		Interval: viper.GetDuration("healthcheck.interval"),
+		Path:	 viper.GetString("healthcheck.path"),
+	}
+	go healthCheckConfig.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
 
 	// Start Deploy process
 	deployConfig := config.PrepareDeployConfig()

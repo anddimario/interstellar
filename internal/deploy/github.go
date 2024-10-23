@@ -38,7 +38,7 @@ func getLastRelease(deployConfig config.DeployConfig) {
 	// Run the command without capturing its output
 	output, err := cmd.Output()
 	if err != nil {
-		slog.Error("Error: %s\n", err)
+		slog.Error("From command output gh", "err", err)
 		return
 	}
 
