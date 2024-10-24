@@ -77,3 +77,7 @@ stateDiagram-v2
   replace --> [*]
   not_healthy --> [*]
 ```
+
+## LICENSE
+
+[License](LICENSE)

@@ -1,4 +1,4 @@
-ù.PHONY: dev
+.PHONY: dev
 dev:
 	air -c .air.toml
 

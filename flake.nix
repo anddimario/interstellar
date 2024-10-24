@@ -21,6 +21,7 @@
             # pkgs.podman
             pkgs.gh
             pkgs.siege
+            pkgs.cobra-cli
           ];
           
           shellHook = ''
