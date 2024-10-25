@@ -19,6 +19,9 @@ func InitConfig() {
 }
 
 func validateConfig() {
+	if !viper.IsSet("cli.socket_path") {
+		log.Fatal("cli.socket_path is not set in the config file")
+	}
 	if !viper.IsSet("balancer.address") {
 		log.Fatal("balancer.address is not set in the config file")
 	}

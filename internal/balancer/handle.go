@@ -130,10 +130,10 @@ func AddCanaryBackend(newReleaseBackend string) {
 	ResultCanary.Backends = append(ResultCanary.Backends, newReleaseBackend)
 }
 
-func getCanaryDeployStatus() CanaryInfo {
+func GetCanaryDeployStatus() *CanaryInfo {
 	muCanary.Lock()
 	defer muCanary.Unlock()
-	return ResultCanary
+	return &ResultCanary
 }
 
 func getCanaryBackend(healthyBackends []string) (string, error) {
@@ -146,6 +146,7 @@ func getCanaryBackend(healthyBackends []string) (string, error) {
 	log.Printf("canaryInfo: %v", ResultCanary)
 
 	// @todo redefine the algorithm?
+	// todo if quota <30 get one request on the new for each 2 requests on the old?
 	// reset the counter if the quota is reached
 	if ResultCanary.TotalProcessedRequests >= 100 {
 		ResultCanary.NewReleaseProcessedRequests = 0

@@ -1,13 +1,9 @@
 /*
 Copyright © 2024 NAME HERE <EMAIL ADDRESS>
-
 */
 package cmd
 
 import (
-	"fmt"
-
-
 	"context"
 	"errors"
 	"log"
@@ -16,11 +12,13 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
 	balancer "github.com/anddimario/interstellar/internal/balancer"
+	"github.com/anddimario/interstellar/internal/cli"
 	config "github.com/anddimario/interstellar/internal/config"
 	deploy "github.com/anddimario/interstellar/internal/deploy"
-	"github.com/spf13/viper"
-	"github.com/spf13/cobra"
 )
 
 // serveCmd represents the serve command
@@ -34,55 +32,60 @@ Cobra is a CLI library for Go that empowers applications.
 This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Println("serve called")
 
-	// Check the required dependencies
-	config.CheckRequirements()
+		// Check the required dependencies
+		config.CheckRequirements()
 
-	// Initialize the configuration
-	config.InitConfig()
+		// Initialize the configuration
+		config.InitConfig()
 
-	// Define server
-	srv := &http.Server{}
-	srv.Addr = viper.GetString("balancer.address")
-	srv.Handler = http.HandlerFunc(balancer.HandleRequest)
+		// Define server
+		srv := &http.Server{}
+		srv.Addr = viper.GetString("balancer.address")
+		srv.Handler = http.HandlerFunc(balancer.HandleRequest)
 
-	// Define a context to listen for signals
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+		// Define a context to listen for signals
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
 
-	// Start the server
-	go func() {
-		slog.Info("Load balancer starting", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatal(err)
+		// Start the server
+		go func() {
+			slog.Info("Load balancer starting", "addr", srv.Addr)
+			if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Fatal(err)
+			}
+		}()
+
+		// Start healthcheck
+		healthCheckConfig := balancer.HealthCheckConfig{
+			Interval: viper.GetDuration("healthcheck.interval"),
+			Path:     viper.GetString("healthcheck.path"),
 		}
-	}()
+		go healthCheckConfig.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
 
-	// Start healthcheck
-	healthCheckConfig := balancer.HealthCheckConfig{
-		Interval: viper.GetDuration("healthcheck.interval"),
-		Path:	 viper.GetString("healthcheck.path"),
-	}
-	go healthCheckConfig.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
+		// Start Deploy process
+		deployConfig := config.PrepareDeployConfig()
+		go deploy.CheckRelease(deployConfig)
 
-	// Start Deploy process
-	deployConfig := config.PrepareDeployConfig()
-	go deploy.CheckRelease(deployConfig)
+		// Cli server
+		cliServerConfig := cli.CliConfig{
+			SocketPath: viper.GetString("cli.socket_path"),
+		}
+		go cliServerConfig.StartCliServer()
 
-	<-ctx.Done()
+		<-ctx.Done()
 
-	slog.Info("Got interruption signal")
-	if err := srv.Shutdown(context.TODO()); err != nil {
-		slog.Error("server shutdown returned an error", "err", err)
-	}
+		slog.Info("Got interruption signal")
+		if err := srv.Shutdown(context.TODO()); err != nil {
+			slog.Error("server shutdown returned an error", "err", err)
+		}
 
-	// Stop healthcheck
-	balancer.HealthCheckDone <- true
-	// Stop monitor new releases on github
-	deploy.CheckReleaseDone <- true
+		// Stop healthcheck
+		balancer.HealthCheckDone <- true
+		// Stop monitor new releases on github
+		deploy.CheckReleaseDone <- true
 
-	slog.Info("Bye!")
+		slog.Info("Bye!")
 
 	},
 }
