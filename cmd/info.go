@@ -44,7 +44,7 @@ var infoCmd = &cobra.Command{
             slog.Error("Failed to get info", "err", err)
         }
 
-        fmt.Printf("Information: %s\n", info)
+        fmt.Println(info)
 
         // if !showVersion && !showBuildDate && !showAuthor {
         //     fmt.Printf("Application Information:\n")

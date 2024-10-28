@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -22,6 +23,11 @@ type InfoResponse struct {
 	Info string
 }
 
+type ResponsePayload struct {
+	Message string `json:"message"`
+	Status  string `json:"status"`
+}
+
 func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 	if req.Query == "" {
 		return errors.New("query cannot be empty")
@@ -33,16 +39,39 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 	// todo: format the output in json?
 	if req.Query == "deploy" {
 		deployIsInProgress := deploy.CheckIfDeployInProgress()
-		fmt.Println(deployIsInProgress)
 		if deployIsInProgress {
 			canaryInfo := balancer.GetCanaryDeployStatus()
 			if canaryInfo.InProgress {
-				res.Info = fmt.Sprintf("Deploy status: %v", balancer.GetCanaryDeployStatus())
+				// Marshal the struct to JSON
+				canaryInfoJSON, err := json.Marshal(balancer.GetCanaryDeployStatus())
+				if err != nil {
+					fmt.Println("Error marshaling JSON:", err)
+					return err
+				}
+				res.Info = string(canaryInfoJSON)
 			} else {
-				res.Info = "Blue-green deploy in progress"
+				payload := ResponsePayload{
+					Message: "Blue-green deploy in progress",
+					Status:  "ok",
+				}
+				payloadJSON, err := json.Marshal(payload)
+				if err != nil {
+					fmt.Println("Error marshaling JSON:", err)
+					return err
+				}
+				res.Info = string(payloadJSON)
 			}
 		} else {
-			res.Info = "No deploy in progress"
+			payload := ResponsePayload{
+				Message: "No deploy in progress",
+				Status:  "ok",
+			}
+			payloadJSON, err := json.Marshal(payload)
+			if err != nil {
+				fmt.Println("Error marshaling JSON:", err)
+				return err
+			}
+			res.Info = string(payloadJSON)
 		}
 	}
 	return nil

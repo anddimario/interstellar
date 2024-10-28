@@ -44,7 +44,7 @@ func healthCheck(interval time.Duration) {
 		case <-t.C:
 			Result.mu.Lock()
 			Result.Value = GetHealthyBackends(Result.Value)
-			slog.Info("Healthy backends", "list", Result.Value) // @todo: remove
+			// slog.Info("Healthy backends", "list", Result.Value) // @todo: remove
 			Result.mu.Unlock()
 		case <-HealthCheckDone:
 			return
@@ -67,7 +67,7 @@ func UpdateBackends(backends []string) {
 	Result.mu.Lock()
 	defer Result.mu.Unlock()
 	Result.Value = backends
-	slog.Info("Updated backends", "list", Result.Value) // @todo: remove
+	// slog.Info("Updated backends", "list", Result.Value) // @todo: remove
 
 	// Update the config too to keep it in sync
 	config.StoreConfig("balancer.backends", backends)
@@ -90,7 +90,7 @@ func GetHealthyBackend(backend string) (bool, error) {
 	}
 	defer resp.Body.Close()
 
-	slog.Info("HealthCheck Status Code", "backend", completeBackendPath, "status", resp.StatusCode) // @todo: remove
+	// slog.Info("HealthCheck Status Code", "backend", completeBackendPath, "status", resp.StatusCode) // @todo: remove
 	if resp.StatusCode == http.StatusOK {
 		return true, nil
 	}

@@ -3,7 +3,6 @@ package deploy
 import (
 	"bytes"
 	"fmt"
-	"log"
 	"log/slog"
 	"math/rand"
 	"os"
@@ -18,20 +17,24 @@ import (
 	"github.com/spf13/viper"
 )
 
+type DeployStatus struct {
+	Progress bool
+	mu       sync.Mutex
+}
+
 var (
-	inProgress bool
-	mu         sync.Mutex
+	Status DeployStatus
 )
 
 func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 
-	mu.Lock()
-	if inProgress {
+	Status.mu.Lock()
+	if Status.Progress {
 		slog.Warn("Deploy in progress, skipping...\n")
 		return
 	}
-	inProgress = true
-	mu.Unlock()
+	Status.Progress = true
+	Status.mu.Unlock()
 
 	processPort, err := chooseNextReleasePort()
 	if err != nil {
@@ -85,16 +88,14 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	slog.Info("Detached process started with PID", "pid", newProcessPID)
 
 	if deployConfig.Type == "canary" {
-		go canaryDeploy(processPort, newProcessPID)
+		go canaryDeploy(processPort, newProcessPID, deployConfig.Repo, releaseVersion)
 	} else {
-		go blueGreenDeploy(processPort, newProcessPID)
+		go blueGreenDeploy(processPort, newProcessPID, deployConfig.Repo, releaseVersion)
 	}
-
-	go postDeploy(deployConfig.Repo, releaseVersion)
 
 }
 
-func canaryDeploy(processPort int, newProcessPID int) {
+func canaryDeploy(processPort int, newProcessPID int, repo string, releaseVersion string) {
 	balancer.ManageCanaryDeployInProgress()
 
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
@@ -105,7 +106,6 @@ func canaryDeploy(processPort int, newProcessPID int) {
 
 	// see if the new version it's healthy (if not close the new version and go to notify)
 	newVersionIsHealthy, err := balancer.GetHealthyBackend(newBackend)
-	log.Printf("newVersionIsHealthy: %v", newVersionIsHealthy) // @todo: remove
 	if err != nil {
 		slog.Error("Checking health of new version", "err", err)
 		return
@@ -141,9 +141,12 @@ func canaryDeploy(processPort int, newProcessPID int) {
 	balancer.RemoveProcesses(oldVersionProcessesPID)
 
 	balancer.ManageCanaryDeployCompleted()
+
+	go postDeploy(repo, releaseVersion)
+
 }
 
-func blueGreenDeploy(processPort int, newProcessPID int) {
+func blueGreenDeploy(processPort int, newProcessPID int, repo string, releaseVersion string) {
 
 	// wait for positive health check
 	positiveHealthCheck := viper.GetInt("bluegreen.positive_healthchecks") // @todo: see if inject
@@ -183,15 +186,17 @@ func blueGreenDeploy(processPort int, newProcessPID int) {
 
 	// @todo: notify, where?
 
+	go postDeploy(repo, releaseVersion)
+
 }
 
 func postDeploy(repo string, release string) {
 
 	config.StoreConfig(repo+".last_release", release)
 
-	mu.Lock()
-	inProgress = false
-	mu.Unlock()
+	Status.mu.Lock()
+	Status.Progress = false
+	Status.mu.Unlock()
 }
 
 func chooseNextReleasePort() (int, error) {
@@ -237,7 +242,7 @@ func replaceBackendInConfig(newBackends []string) {
 }
 
 func CheckIfDeployInProgress() bool {
-	mu.Lock()
-	defer mu.Unlock()
-	return inProgress
+	Status.mu.Lock()
+	defer Status.mu.Unlock()
+	return Status.Progress
 }

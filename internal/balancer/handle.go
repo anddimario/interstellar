@@ -27,11 +27,11 @@ type Handler struct {
 }
 
 type CanaryInfo struct {
-	NewReleaseProcessedRequests int
-	TotalProcessedRequests      int
+	NewReleaseProcessedRequests int `json:"new_release_processed_requests"`
+	TotalProcessedRequests      int `json:"total_processed_requests"`
 	InProgress                  bool
 	NewIsLastUsedBacked         bool // used to allow the request to split
-	Backends                    []string
+	Backends                    []string `json:"backends"`
 }
 
 // HTTP handler to forward requests to backend servers
