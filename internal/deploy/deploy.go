@@ -29,12 +29,12 @@ var (
 func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 
 	Status.mu.Lock()
+	defer Status.mu.Unlock()
 	if Status.Progress {
 		slog.Warn("Deploy in progress, skipping...\n")
 		return
 	}
 	Status.Progress = true
-	Status.mu.Unlock()
 
 	processPort, err := chooseNextReleasePort()
 	if err != nil {

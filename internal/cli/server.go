@@ -11,6 +11,7 @@ import (
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
 	"github.com/anddimario/interstellar/internal/deploy"
+	"github.com/spf13/viper"
 )
 
 type InfoService struct{}
@@ -33,7 +34,9 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 		return errors.New("query cannot be empty")
 	}
 	if req.Query == "version" {
-		res.Info = "1.0.0"
+		repo := viper.GetString("deploy.repo")
+		versionConfigPath := fmt.Sprintf("%s.%s", repo, "last_release")
+		res.Info = viper.GetString(versionConfigPath)
 		return nil
 	}
 	// todo: format the output in json?

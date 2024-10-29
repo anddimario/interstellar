@@ -46,12 +46,6 @@ var infoCmd = &cobra.Command{
 
         fmt.Println(info)
 
-        // if !showVersion && !showBuildDate && !showAuthor {
-        //     fmt.Printf("Application Information:\n")
-        //     fmt.Printf("Version: %s\n", version)
-        //     fmt.Printf("Build Date: %s\n", buildDate)
-        //     fmt.Printf("Author: %s\n", author)
-        // }
 	},
 }
 
