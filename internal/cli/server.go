@@ -8,13 +8,28 @@ import (
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os"
+	"strconv"
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
 	"github.com/anddimario/interstellar/internal/deploy"
 	"github.com/spf13/viper"
 )
 
+type CliConfig struct {
+	SocketPath string
+}
+
 type InfoService struct{}
+type DeployService struct{}
+
+type CommandRequest struct {
+	Command string
+	Param   string
+}
+
+type CommandResponse struct {
+	Result string
+}
 
 type InfoRequest struct {
 	Query string
@@ -30,17 +45,12 @@ type ResponsePayload struct {
 }
 
 func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
-	if req.Query == "" {
-		return errors.New("query cannot be empty")
-	}
-	if req.Query == "version" {
+	switch req.Query {
+	case "version":
 		repo := viper.GetString("deploy.repo")
 		versionConfigPath := fmt.Sprintf("%s.%s", repo, "last_release")
 		res.Info = viper.GetString(versionConfigPath)
-		return nil
-	}
-	// todo: format the output in json?
-	if req.Query == "deploy" {
+	case "deploy":
 		deployIsInProgress := deploy.CheckIfDeployInProgress()
 		if deployIsInProgress {
 			canaryInfo := balancer.GetCanaryDeployStatus()
@@ -76,12 +86,39 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 			}
 			res.Info = string(payloadJSON)
 		}
+	default:
+		return errors.New("invalid query")
 	}
 	return nil
 }
 
-type CliConfig struct {
-	SocketPath string
+func (s *DeployService) Canary(req CommandRequest, res *CommandResponse) error {
+	switch req.Command {
+	case "canary-update-quota":
+		deployIsInProgress := deploy.CheckIfDeployInProgress()
+		if !deployIsInProgress {
+			return errors.New("no deploy in progress")
+		}
+		// Convert the string to an integer
+		quota, err := strconv.Atoi(req.Param)
+		if err != nil {
+			return errors.New("invalid quota")
+		}
+		balancer.UpdateCanaryNewReleaseQuota(int(quota))
+
+		payload := ResponsePayload{
+			Message: "Quota updated",
+			Status:  "ok",
+		}
+		payloadJSON, err := json.Marshal(payload)
+		if err != nil {
+			return errors.New("error marshaling JSON " + err.Error())
+		}
+		res.Result = string(payloadJSON)
+	default:
+		return errors.New("invalid command")
+	}
+	return nil
 }
 
 func (config CliConfig) StartCliServer() {
@@ -89,6 +126,9 @@ func (config CliConfig) StartCliServer() {
 
 	infoService := new(InfoService)
 	rpc.Register(infoService)
+
+	deployService := new(DeployService)
+	rpc.Register(deployService)
 
 	listener, err := net.Listen("unix", config.SocketPath)
 	if err != nil {

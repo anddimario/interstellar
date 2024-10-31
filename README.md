@@ -7,6 +7,7 @@ Application deployer
 - monitor and get release from github
 - run executable
 - blue green and canary deploy
+- cli
 
 ## Install and requirements
 

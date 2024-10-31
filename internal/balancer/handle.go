@@ -2,7 +2,6 @@ package balancer
 
 import (
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -27,10 +26,11 @@ type Handler struct {
 }
 
 type CanaryInfo struct {
+	NewReleaseQuota             int `json:"new_release_quota"`
 	NewReleaseProcessedRequests int `json:"new_release_processed_requests"`
 	TotalProcessedRequests      int `json:"total_processed_requests"`
 	InProgress                  bool
-	NewIsLastUsedBacked         bool // used to allow the request to split
+	NewIsLastUsedBacked         bool     // used to allow the request to split
 	Backends                    []string `json:"backends"`
 }
 
@@ -101,7 +101,11 @@ func ManageCanaryDeployInProgress() {
 	slog.Info("Canary deploy in progress\n")
 	muCanary.Lock()
 	defer muCanary.Unlock()
+
+	newReleaseQuota := viper.GetInt("canary.new_release_quota") // @todo inject this value to avoid viper at each request
+
 	ResultCanary = CanaryInfo{
+		NewReleaseQuota:             newReleaseQuota,
 		InProgress:                  true,
 		NewReleaseProcessedRequests: 0,
 		TotalProcessedRequests:      0,
@@ -113,12 +117,11 @@ func ManageCanaryDeployCompleted() {
 	muCanary.Lock()
 	defer muCanary.Unlock()
 
-	// @todo reset the canary counters
 	ResultCanary.InProgress = false
 	ResultCanary.NewReleaseProcessedRequests = 0
 	ResultCanary.TotalProcessedRequests = 0
 	ResultCanary.Backends = nil
-	ResultCanary.NewIsLastUsedBacked = false 
+	ResultCanary.NewIsLastUsedBacked = false
 
 	slog.Info("Canary deploy completed\n")
 }
@@ -140,10 +143,7 @@ func getCanaryBackend(healthyBackends []string) (string, error) {
 	muCanary.Lock()
 	defer muCanary.Unlock()
 
-	newReleaseQuota := viper.GetInt("canary.new_release_quota") // @todo inject this value to avoid viper at each request
-
 	ResultCanary.TotalProcessedRequests++
-	log.Printf("canaryInfo: %v", ResultCanary)
 
 	// @todo redefine the algorithm?
 	// todo if quota <30 get one request on the new for each 2 requests on the old?
@@ -153,7 +153,7 @@ func getCanaryBackend(healthyBackends []string) (string, error) {
 		ResultCanary.TotalProcessedRequests = 0
 	}
 
-	if ResultCanary.NewReleaseProcessedRequests < newReleaseQuota && len(ResultCanary.Backends) > 0 && !ResultCanary.NewIsLastUsedBacked {
+	if ResultCanary.NewReleaseProcessedRequests < ResultCanary.NewReleaseQuota && len(ResultCanary.Backends) > 0 && !ResultCanary.NewIsLastUsedBacked {
 		// Use this to allow the request to split
 		ResultCanary.NewIsLastUsedBacked = true
 		ResultCanary.NewReleaseProcessedRequests++
@@ -164,4 +164,11 @@ func getCanaryBackend(healthyBackends []string) (string, error) {
 		i := atomic.AddUint32(&index, 1)
 		return healthyBackends[i%uint32(len(healthyBackends))], nil
 	}
+}
+
+func UpdateCanaryNewReleaseQuota(newQuota int) {
+	muCanary.Lock()
+	defer muCanary.Unlock()
+
+	ResultCanary.NewReleaseQuota = newQuota
 }

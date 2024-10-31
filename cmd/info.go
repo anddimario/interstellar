@@ -14,37 +14,37 @@ import (
 )
 
 var (
-    showVersion   bool
-    showDeploy bool
+	showVersion bool
+	showDeploy  bool
 )
 
 // infoCmd represents the info command
 var infoCmd = &cobra.Command{
 	Use:   "info",
 	Short: "Information about the application",
-	Long: `Information about the application`,
+	Long:  `Information about the application`,
 	Run: func(cmd *cobra.Command, args []string) {
 		socketPath := viper.GetString("cli.socket_path") // todo see if injectable
 
-		infoClient, err := cli.NewInfoClient(socketPath)
-        if err != nil {
-            slog.Error("Failed to connect to server", "err", err)
-        }
+		infoCliClient, err := cli.NewInfoClient(socketPath)
+		if err != nil {
+			slog.Error("Failed to connect to server", "err", err)
+		}
 
 		query := "version"
 		// if showVersion {
-        //     fmt.Printf("Version: %s\n", version)
+		//     fmt.Printf("Version: %s\n", version)
 		// }
-        if showDeploy {
+		if showDeploy {
 			query = "deploy"
 		}
 
-        info, err := infoClient.GetInfo(query)
-        if err != nil {
-            slog.Error("Failed to get info", "err", err)
-        }
+		info, err := infoCliClient.GetInfo(query)
+		if err != nil {
+			slog.Error("Failed to get info", "err", err)
+		}
 
-        fmt.Println(info)
+		fmt.Println(info)
 
 	},
 }
