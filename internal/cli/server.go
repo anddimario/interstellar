@@ -45,6 +45,7 @@ type ResponsePayload struct {
 }
 
 func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
+	var err error
 	switch req.Query {
 	case "version":
 		repo := viper.GetString("deploy.repo")
@@ -63,28 +64,16 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 				}
 				res.Info = string(canaryInfoJSON)
 			} else {
-				payload := ResponsePayload{
-					Message: "Blue-green deploy in progress",
-					Status:  "ok",
-				}
-				payloadJSON, err := json.Marshal(payload)
+				res.Info, err = createResponsePayload("Blue-green deploy in progress", "ok")
 				if err != nil {
-					fmt.Println("Error marshaling JSON:", err)
 					return err
 				}
-				res.Info = string(payloadJSON)
 			}
 		} else {
-			payload := ResponsePayload{
-				Message: "No deploy in progress",
-				Status:  "ok",
-			}
-			payloadJSON, err := json.Marshal(payload)
+			res.Info, err = createResponsePayload("No deploy in progress", "ok")
 			if err != nil {
-				fmt.Println("Error marshaling JSON:", err)
 				return err
 			}
-			res.Info = string(payloadJSON)
 		}
 	default:
 		return errors.New("invalid query")
@@ -92,7 +81,9 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 	return nil
 }
 
-func (s *DeployService) Canary(req CommandRequest, res *CommandResponse) error {
+// todo: see if use functions in cases for more readable code
+func (s *DeployService) ExecuteAction(req CommandRequest, res *CommandResponse) error {
+	var err error
 	switch req.Command {
 	case "canary-update-quota":
 		deployIsInProgress := deploy.CheckIfDeployInProgress()
@@ -106,20 +97,24 @@ func (s *DeployService) Canary(req CommandRequest, res *CommandResponse) error {
 		}
 		balancer.UpdateCanaryNewReleaseQuota(int(quota))
 
-		payload := ResponsePayload{
-			Message: "Quota updated",
-			Status:  "ok",
-		}
-		payloadJSON, err := json.Marshal(payload)
+		res.Result, err = createResponsePayload("Quota updated", "ok")
 		if err != nil {
-			return errors.New("error marshaling JSON " + err.Error())
+			return err
 		}
-		res.Result = string(payloadJSON)
+	case "rollback":
+		go deploy.Rollback(req.Param)
+
+		message := fmt.Sprintf("Started rollback to version %s", req.Param)
+		res.Result, err = createResponsePayload(message, "ok")
+		if err != nil {
+			return err
+		}
 	default:
 		return errors.New("invalid command")
 	}
 	return nil
 }
+
 
 func (config CliConfig) StartCliServer() {
 	os.Remove(config.SocketPath) // Remove the socket file if it already exists
@@ -143,4 +138,17 @@ func (config CliConfig) StartCliServer() {
 		}
 		go rpc.ServeCodec(jsonrpc.NewServerCodec(conn))
 	}
+}
+
+func createResponsePayload(message string, status string) (string, error) {
+
+	payload := ResponsePayload{
+		Message: message,
+		Status:  status,
+	}
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", errors.New("error marshaling JSON " + err.Error())
+	}
+	return string(payloadJSON), nil
 }

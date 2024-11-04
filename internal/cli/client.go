@@ -33,10 +33,10 @@ func NewDeployClient(socketPath string) (*DeployClient, error) {
     return &DeployClient{client: client}, nil
 }
 
-func (c *DeployClient) Canary(action string, param string) (string, error) {
+func (c *DeployClient) ExecuteAction(service string, action string, param string) (string, error) {
     req := CommandRequest{Command: action, Param: param}
     var res CommandResponse
-    err := c.client.Call("DeployService.Canary", req, &res)
+    err := c.client.Call(service, req, &res)
     if err != nil {
         return "", err
     }

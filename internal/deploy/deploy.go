@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
-	"os"
 	"os/exec"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
@@ -36,61 +34,16 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 	}
 	Status.Progress = true
 
-	processPort, err := chooseNextReleasePort()
+	newReleasProcess, err := LaunchNewVersion(deployConfig, releaseVersion)
 	if err != nil {
-		slog.Error("Choosing port", "err", err)
+		slog.Error("Launching new version", "err", err)
 		return
 	}
-
-	executablePath := deployConfig.ReleasePath + "/" + deployConfig.ExecutableCommand
-
-	cmd := exec.Command(executablePath, deployConfig.ExecutableArgs...)
-
-	processEnvVariable := append(deployConfig.ExecutableEnv, fmt.Sprintf("PORT=%d", processPort))
-
-	// Set the environment variables
-	cmd.Env = append(os.Environ(), processEnvVariable...)
-
-	slog.Info("Starting release", "command", executablePath)
-
-	// Configure the command to detach from the parent process
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
-	}
-
-	// Redirect stdout and stderr to files
-	stdoutFile, err := os.Create("stdout.log") // @todo: use a log package, or define dir in config
-	if err != nil {
-		slog.Error("Creating stdout file", "err", err)
-		return
-	}
-	defer stdoutFile.Close()
-
-	stderrFile, err := os.Create("stderr.log") // @todo: use a log package, or define dir in config
-	if err != nil {
-		slog.Error("Creating stderr file", "err", err)
-		return
-	}
-	defer stderrFile.Close()
-
-	cmd.Stdout = stdoutFile
-	cmd.Stderr = stderrFile
-
-	// Start the command
-	err = cmd.Start()
-	if err != nil {
-		slog.Error("Starting command", "err", err)
-		return
-	}
-
-	newProcessPID := cmd.Process.Pid
-	// Print the PID of the detached process
-	slog.Info("Detached process started with PID", "pid", newProcessPID)
 
 	if deployConfig.Type == "canary" {
-		go canaryDeploy(processPort, newProcessPID, deployConfig.Repo, releaseVersion)
+		go canaryDeploy(newReleasProcess.Port, newReleasProcess.PID, deployConfig.Repo, releaseVersion)
 	} else {
-		go blueGreenDeploy(processPort, newProcessPID, deployConfig.Repo, releaseVersion)
+		go blueGreenDeploy(newReleasProcess.Port, newReleasProcess.PID, deployConfig.Repo, releaseVersion)
 	}
 
 }
