@@ -7,6 +7,7 @@ Application deployer
 - monitor and get release from github
 - run executable
 - blue green and canary deploy
+- rollback
 - cli
 
 ## Install and requirements
@@ -19,28 +20,30 @@ Application deployer
 
 ```mermaid
 stateDiagram-v2
-    check: Check release
-    download: Download new release
-    choose_port: Choose a port
-    add_backend: Add new process as backend
-    create_vm: Run the process
-    canary: Canary
-    blue_green: Blue green
-    state new_release <<choice>>
-    state deploy_type <<fork>>
-    state done_deploy <<join>>
-    check --> new_release
-    new_release --> check : No new release
-    new_release --> download
-    download --> choose_port
-    choose_port --> add_backend 
-    add_backend --> create_vm
-    create_vm --> deploy_type
-    deploy_type --> canary
-    deploy_type --> blue_green
-    canary --> done_deploy
-    blue_green --> done_deploy
-    done_deploy --> [*]
+  check_ignore: Check if ignore
+  check: Check release
+  download: Download new release
+  choose_port: Choose a port
+  add_backend: Add new process as backend
+  create_vm: Run the process
+  canary: Canary
+  blue_green: Blue green
+  state new_release <<choice>>
+  state deploy_type <<fork>>
+  state done_deploy <<join>>
+  check --> new_release
+  new_release --> check : No new release
+  new_release --> check_ignore
+  check_ignore --> download
+  download --> choose_port
+  choose_port --> add_backend 
+  add_backend --> create_vm
+  create_vm --> deploy_type
+  deploy_type --> canary
+  deploy_type --> blue_green
+  canary --> done_deploy
+  blue_green --> done_deploy
+  done_deploy --> [*]
 ```
 
 ### Canary deploy
@@ -52,6 +55,7 @@ stateDiagram-v2
   add: Add the new version
   not_healthy: Remove new version
   remove_old: Remove old version
+  post_deploy: Post deploy actions
   state is_healthy <<choice>>
   check --> is_healthy
   is_healthy --> add : is healthy
@@ -59,7 +63,8 @@ stateDiagram-v2
   add --> wait
   wait --> remove_old
   not_healthy --> [*]
-  remove_old --> [*]
+  remove_old --> post_deploy
+  post_deploy --> [*]
 ```
 
 ### Blue green deploy
@@ -70,13 +75,36 @@ stateDiagram-v2
   check: Check if healthy
   replace: Replace old with new
   not_healthy: Remove new version
+  post_deploy: Post deploy actions
   state is_healthy <<choice>>
   wait --> check
   check --> is_healthy
   is_healthy --> replace : is healthy
   is_healthy --> not_healthy
-  replace --> [*]
   not_healthy --> [*]
+  replace --> post_deploy
+  post_deploy --> [*]
+```
+
+### Rollback
+
+```mermaid
+stateDiagram-v2
+  check: Check if deploy in progress, or version exists
+  state if_check_ok <<choice>>
+  get_release: Get Release
+  decompress: Decompress Release
+  start: Start the rollback version
+  remove: Remove the actual version
+  update_config: Update config
+  check --> if_check_ok
+  if_check_ok --> get_release : Check ok
+  if_check_ok --> [*]
+  get_release --> decompress
+  decompress --> start
+  start --> remove
+  remove --> update_config
+  update_config --> [*]
 ```
 
 ## LICENSE

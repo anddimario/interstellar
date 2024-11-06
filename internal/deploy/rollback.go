@@ -3,26 +3,31 @@ package deploy
 import (
 	"fmt"
 	"log/slog"
+	"os/exec"
 
-	config "github.com/anddimario/interstellar/internal/config"
 	balancer "github.com/anddimario/interstellar/internal/balancer"
+	config "github.com/anddimario/interstellar/internal/config"
 )
 
 func Rollback(releaseVersion string) {
-	fmt.Println("Rollback")
+	slog.Info("Rollback to release", "version", releaseVersion)
 
 	deployIsInProgress := CheckIfDeployInProgress()
-	
-	fmt.Print(deployIsInProgress)
+
 	if deployIsInProgress {
 		slog.Error("Deploy in progress, rollback not allowed")
 		return
 	}
 
-	// todo check if the release exists
-	// gh release view <tag> --repo <owner>/<repo>
-
 	deployConfig := config.PrepareDeployConfig()
+	// Get last release info for the old version
+	lastReleaseConfig := config.PrepareReleaseConfig(deployConfig.Repo)
+
+	releaseExists := checkIfReleaseExists(deployConfig.Repo, releaseVersion)
+	if !releaseExists {
+		slog.Error("Release does not exist", "releaseVersion", releaseVersion)
+		return
+	}
 
 	DownloadRelease(deployConfig.Repo, releaseVersion, deployConfig.ReleasePath, deployConfig.AssetName)
 	DecompressRelease(deployConfig.Repo, releaseVersion, deployConfig.ReleasePath)
@@ -47,4 +52,29 @@ func Rollback(releaseVersion string) {
 
 	// kill old version
 	balancer.RemoveProcesses(oldVersionProcessesPID)
+
+	// update the release in the config
+	config.StoreConfig(deployConfig.Repo+".last_release", releaseVersion)
+
+	// set the older version in the ignore to avoid the next deploy with the same version
+	config.StoreConfig(deployConfig.Repo+".ignore", lastReleaseConfig.LastRelease)
+}
+
+func checkIfReleaseExists(repo string, releaseVersion string) bool {
+	// gh release view <tag> --repo <owner>/<repo>
+	// Command to execute
+	cmd := exec.Command("gh", "release", "view", releaseVersion, "--repo", repo)
+
+	// Run the command without capturing its output
+	_, err := cmd.Output() // The output is non necessary
+	// NOTE: if release not exists gh will return a status code 1 and enter the err
+	if err != nil {
+		slog.Error("From command output gh", "err", err)
+		return false
+	}
+
+	//	outputString := string(output)
+	//	releaseInfo := strings.Fields(outputString)
+
+	return true
 }

@@ -32,6 +32,7 @@ func CheckRelease(deployConfig config.DeployConfig) {
 }
 
 func getLastRelease(deployConfig config.DeployConfig) {
+
 	// Command to execute
 	cmd := exec.Command("gh", "release", "list", "--repo", deployConfig.Repo, "--limit", "1")
 
@@ -49,6 +50,13 @@ func getLastRelease(deployConfig config.DeployConfig) {
 	lastDeployedRelease := viper.GetString(deployConfig.Repo + ".last_release")
 
 	if lastDeployedRelease == releaseVersion {
+		return
+	}
+
+	// Check if the release is in ignore after a rollback
+	ignoreRelease := viper.GetString(deployConfig.Repo + ".ignore") // todo see if injectable
+	if ignoreRelease == releaseVersion {
+		slog.Error("Release in ignore, skipping deploy", "releaseVersion", releaseVersion)
 		return
 	}
 

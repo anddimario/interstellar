@@ -17,6 +17,11 @@ type DeployConfig struct {
 	Type                 string
 }
 
+type ReleaseConfig struct {
+	LastRelease string
+	Ignore      string
+}
+
 func PrepareDeployConfig() DeployConfig {
 
 	// Start monitor new releases on github
@@ -38,5 +43,16 @@ func PrepareDeployConfig() DeployConfig {
 		ExecutableEnv:        executableEnv,
 		ExecutableArgs:       executableArgs,
 		Type:                 deployType,
+	}
+}
+
+func PrepareReleaseConfig(repo string) ReleaseConfig {
+	
+	lastRelease := viper.GetString(repo + ".last_release")
+	ignore := viper.GetString(repo + ".ignore")
+
+	return ReleaseConfig{
+		LastRelease: lastRelease,
+		Ignore:      ignore,
 	}
 }

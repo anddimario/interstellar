@@ -20,3 +20,4 @@ func StoreConfig[T any](name string, value T) {
     }
 
 }
+

@@ -25,10 +25,6 @@ var deployCmd = &cobra.Command{
 	Long:  `Manage deploy and rollback`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		fmt.Printf("cmd: %v\n", cmd)
-		fmt.Printf("args: %v\n", args)
-		fmt.Printf("canaryQuota: %v\n", canaryQuota)
-		fmt.Printf("rollbackVersion: %v\n", rollbackVersion)
 		socketPath := viper.GetString("cli.socket_path") // todo see if injectable
 
 		deployCliClient, err := cli.NewDeployClient(socketPath)
