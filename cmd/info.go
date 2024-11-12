@@ -8,9 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	cli "github.com/anddimario/interstellar/internal/cli"
+	config "github.com/anddimario/interstellar/internal/config"
 )
 
 var (
@@ -24,7 +24,7 @@ var infoCmd = &cobra.Command{
 	Short: "Information about the application",
 	Long:  `Information about the application`,
 	Run: func(cmd *cobra.Command, args []string) {
-		socketPath := viper.GetString("cli.socket_path") // todo see if injectable
+		socketPath := config.GetValueFromConfig("cli.socket_path") // todo see if injectable
 
 		infoCliClient, err := cli.NewInfoClient(socketPath)
 		if err != nil {

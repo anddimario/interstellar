@@ -22,17 +22,23 @@ type ReleaseConfig struct {
 	Ignore      string
 }
 
+type RecoveryConfig struct {
+	DeployInProgress bool
+	NewProcessPID    int
+	NewProcessPort   int
+}
+
 func PrepareDeployConfig() DeployConfig {
 
 	// Start monitor new releases on github
 	checkReleaseInterval := viper.GetDuration("deploy.check_release_interval")
-	repo := viper.GetString("deploy.repo")
-	releasePath := viper.GetString("deploy.release_path")
-	assetName := viper.GetString("deploy.asset_name")
-	executableCommand := viper.GetString("deploy.executable_command")
+	repo := GetValueFromConfig("deploy.repo")
+	releasePath := GetValueFromConfig("deploy.release_path")
+	assetName := GetValueFromConfig("deploy.asset_name")
+	executableCommand := GetValueFromConfig("deploy.executable_command")
 	executableEnv := viper.GetStringSlice("deploy.executable_env")
 	executableArgs := viper.GetStringSlice("deploy.executable_args")
-	deployType := viper.GetString("deploy.type")
+	deployType := GetValueFromConfig("deploy.type")
 
 	return DeployConfig{
 		CheckReleaseInterval: checkReleaseInterval,
@@ -47,12 +53,25 @@ func PrepareDeployConfig() DeployConfig {
 }
 
 func PrepareReleaseConfig(repo string) ReleaseConfig {
-	
-	lastRelease := viper.GetString(repo + ".last_release")
-	ignore := viper.GetString(repo + ".ignore")
+
+	lastRelease := GetValueFromConfig(repo + ".last_release")
+	ignore := GetValueFromConfig(repo + ".ignore")
 
 	return ReleaseConfig{
 		LastRelease: lastRelease,
 		Ignore:      ignore,
+	}
+}
+
+func PrepareRecoveryConfig() RecoveryConfig {
+
+	inProgress := viper.GetBool("deploy.in_progress")
+	newProcessPID := viper.GetInt("deploy.new_process_pid")
+	newProcessPort := viper.GetInt("deploy.new_process_port")
+
+	return RecoveryConfig{
+		DeployInProgress: inProgress,
+		NewProcessPID:    newProcessPID,
+		NewProcessPort:   newProcessPort,
 	}
 }

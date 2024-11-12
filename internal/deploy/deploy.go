@@ -33,6 +33,7 @@ func StartDeploy(deployConfig config.DeployConfig, releaseVersion string) {
 		return
 	}
 	Status.Progress = true
+	config.StoreValueInConfig("deploy.in_progress", true)
 
 	newReleasProcess, err := LaunchNewVersion(deployConfig, releaseVersion)
 	if err != nil {
@@ -145,9 +146,12 @@ func blueGreenDeploy(processPort int, newProcessPID int, repo string, releaseVer
 
 func postDeploy(repo string, release string) {
 
-	config.StoreConfig(repo+".last_release", release)
-	// reset the ignore release
-	config.StoreConfig(repo+".ignore", "")
+	config.StoreValueInConfig(repo+".last_release", release)
+	// reset the ignore release, and other temp values
+	config.DeleteValueInConfig(repo + ".ignore")
+	config.DeleteValueInConfig("deploy.in_progress")
+	config.DeleteValueInConfig("deploy.new_process_pid")
+	config.DeleteValueInConfig("deploy.new_process_port")
 
 	Status.mu.Lock()
 	Status.Progress = false

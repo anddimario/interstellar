@@ -3,3 +3,4 @@
 config.toml
 tmp
 *.log
+.vagrant

@@ -8,11 +8,24 @@ Application deployer
 - run executable
 - blue green and canary deploy
 - rollback
+- recovery from crash
 - cli
 
 ## Install and requirements
 
 - Deps: `gh` (github cli)
+
+## CLI
+
+```bash
+interstellar -h
+```
+
+### Dev
+
+```bash
+go run main.go -h
+```
 
 ## Diagrams
 
@@ -106,6 +119,23 @@ stateDiagram-v2
   remove --> update_config
   update_config --> [*]
 ```
+
+### Recovery from crash
+
+```mermaid
+stateDiagram-v2
+  start: Startup
+  check_deploy: Check if deploy in progress
+  state if_check_ok <<choice>>
+  kill: Kill other version processes
+  start --> check_deploy
+  check_deploy --> if_check_ok
+  if_check_ok --> kill : Zombie deploy
+  kill --> [*]
+  if_check_ok --> [*]
+```
+
+**NOTE** The healthcheck will remove the backend from the backends list
 
 ## LICENSE
 

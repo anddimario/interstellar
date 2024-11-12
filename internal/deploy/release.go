@@ -65,6 +65,11 @@ func LaunchNewVersion(deployConfig config.DeployConfig, releaseVersion string) (
 	}
 
 	newProcessPID := cmd.Process.Pid
+
+	// Store the process info in the config, useful for rollback and recovery from crash
+	config.StoreValueInConfig("deploy.new_process_pid", newProcessPID)
+	config.StoreValueInConfig("deploy.new_process_port", processPort)
+
 	// Print the PID of the detached process
 	slog.Info("Detached process started with PID", "pid", newProcessPID)
 

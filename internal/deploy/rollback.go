@@ -54,10 +54,10 @@ func Rollback(releaseVersion string) {
 	balancer.RemoveProcesses(oldVersionProcessesPID)
 
 	// update the release in the config
-	config.StoreConfig(deployConfig.Repo+".last_release", releaseVersion)
+	config.StoreValueInConfig(deployConfig.Repo+".last_release", releaseVersion)
 
 	// set the older version in the ignore to avoid the next deploy with the same version
-	config.StoreConfig(deployConfig.Repo+".ignore", lastReleaseConfig.LastRelease)
+	config.StoreValueInConfig(deployConfig.Repo+".ignore", lastReleaseConfig.LastRelease)
 }
 
 func checkIfReleaseExists(repo string, releaseVersion string) bool {

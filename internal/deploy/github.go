@@ -9,7 +9,6 @@ import (
 	"time"
 
 	config "github.com/anddimario/interstellar/internal/config"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -47,14 +46,14 @@ func getLastRelease(deployConfig config.DeployConfig) {
 	releaseInfo := strings.Fields(outputString)
 	releaseVersion := releaseInfo[0]
 
-	lastDeployedRelease := viper.GetString(deployConfig.Repo + ".last_release")
+	lastDeployedRelease := config.GetValueFromConfig(deployConfig.Repo + ".last_release")
 
 	if lastDeployedRelease == releaseVersion {
 		return
 	}
 
 	// Check if the release is in ignore after a rollback
-	ignoreRelease := viper.GetString(deployConfig.Repo + ".ignore") // todo see if injectable
+	ignoreRelease := config.GetValueFromConfig(deployConfig.Repo + ".ignore") // todo see if injectable
 	if ignoreRelease == releaseVersion {
 		slog.Error("Release in ignore, skipping deploy", "releaseVersion", releaseVersion)
 		return

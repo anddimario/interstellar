@@ -11,8 +11,8 @@ import (
 	"strconv"
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
+	"github.com/anddimario/interstellar/internal/config"
 	"github.com/anddimario/interstellar/internal/deploy"
-	"github.com/spf13/viper"
 )
 
 type CliConfig struct {
@@ -48,9 +48,9 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 	var err error
 	switch req.Query {
 	case "version":
-		repo := viper.GetString("deploy.repo")
+		repo := config.GetValueFromConfig("deploy.repo")
 		versionConfigPath := fmt.Sprintf("%s.%s", repo, "last_release")
-		res.Info = viper.GetString(versionConfigPath)
+		res.Info = config.GetValueFromConfig(versionConfigPath)
 	case "deploy":
 		deployIsInProgress := deploy.CheckIfDeployInProgress()
 		if deployIsInProgress {
@@ -114,7 +114,6 @@ func (s *DeployService) ExecuteAction(req CommandRequest, res *CommandResponse) 
 	}
 	return nil
 }
-
 
 func (config CliConfig) StartCliServer() {
 	os.Remove(config.SocketPath) // Remove the socket file if it already exists

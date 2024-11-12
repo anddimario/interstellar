@@ -70,7 +70,7 @@ func UpdateBackends(backends []string) {
 	// slog.Info("Updated backends", "list", Result.Value) // @todo: remove
 
 	// Update the config too to keep it in sync
-	config.StoreConfig("balancer.backends", backends)
+	config.StoreValueInConfig("balancer.backends", backends)
 }
 
 func GetHealthyBackend(backend string) (bool, error) {
@@ -121,7 +121,7 @@ func GetHealthyBackends(backends []string) []string {
 	}
 
 	if needReplaceInConfig {
-		config.StoreConfig("balancer.backends", healthyBackends)
+		config.StoreValueInConfig("balancer.backends", healthyBackends)
 	}
 
 	return healthyBackends

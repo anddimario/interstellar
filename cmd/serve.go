@@ -19,18 +19,21 @@ import (
 	"github.com/anddimario/interstellar/internal/cli"
 	config "github.com/anddimario/interstellar/internal/config"
 	deploy "github.com/anddimario/interstellar/internal/deploy"
+	peer "github.com/anddimario/interstellar/internal/peer"
+)
+
+var (
+	address      string
+	peerAddress  string
+	peerName     string
+	peerNodeAddr string
 )
 
 // serveCmd represents the serve command
 var serveCmd = &cobra.Command{
 	Use:   "serve",
-	Short: "A brief description of your command",
-	Long: `A longer description that spans multiple lines and likely contains examples
-and usage of using your command. For example:
-
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
+	Short: "Run the proxy server",
+	Long:  `Run the proxy server. This command will start the proxy server, the healthcheck process, and the other used processes.`,
 	Run: func(cmd *cobra.Command, args []string) {
 
 		// Check the required dependencies
@@ -39,9 +42,15 @@ to quickly create a Cobra application.`,
 		// Initialize the configuration
 		config.InitConfig()
 
+		// Check pending releases
+		go deploy.RecoveryFromCrash(config.PrepareRecoveryConfig())
+
 		// Define server
 		srv := &http.Server{}
 		srv.Addr = viper.GetString("balancer.address")
+		if address != "" {
+			srv.Addr = address
+		}
 		srv.Handler = http.HandlerFunc(balancer.HandleRequest)
 
 		// Define a context to listen for signals
@@ -73,6 +82,17 @@ to quickly create a Cobra application.`,
 		}
 		go cliServerConfig.StartCliServer()
 
+		// Start peer with gossip protocol
+		if peerName != "" {
+			newPeer := peer.NewPeer(peerName, peerAddress)
+			if peerNodeAddr != "" {
+				newPeer.Bootstrap(peerNodeAddr)
+			}
+			go newPeer.Gossip()
+			go newPeer.Listen()
+		}
+
+		// Shutdown operations
 		<-ctx.Done()
 
 		slog.Info("Got interruption signal")
@@ -80,6 +100,9 @@ to quickly create a Cobra application.`,
 			slog.Error("server shutdown returned an error", "err", err)
 		}
 
+		// Stop peer gossip
+		peer.PeeringDone <- true
+		// close(peer.PeeringDone)
 		// Stop healthcheck
 		balancer.HealthCheckDone <- true
 		// Stop monitor new releases on github
@@ -93,13 +116,8 @@ to quickly create a Cobra application.`,
 func init() {
 	rootCmd.AddCommand(serveCmd)
 
-	// Here you will define your flags and configuration settings.
-
-	// Cobra supports Persistent Flags which will work for this command
-	// and all subcommands, e.g.:
-	// serveCmd.PersistentFlags().String("foo", "", "A help for foo")
-
-	// Cobra supports local flags which will only run when this command
-	// is called directly, e.g.:
-	// serveCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	serveCmd.Flags().StringVarP(&address, "address", "a", "localhost:8080", "Address to listen on")
+	serveCmd.Flags().StringVarP(&peerAddress, "peer-address", "e", "localhost:8080", "Address to listen on")
+	serveCmd.Flags().StringVarP(&peerName, "peer-name", "n", "", "Peer name")
+	serveCmd.Flags().StringVarP(&peerNodeAddr, "peer-bootstrap", "b", "", "Peer node address for bootstrap")
 }

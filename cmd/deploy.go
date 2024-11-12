@@ -8,9 +8,9 @@ import (
 	"log/slog"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	cli "github.com/anddimario/interstellar/internal/cli"
+	config "github.com/anddimario/interstellar/internal/config"
 )
 
 var (
@@ -25,7 +25,7 @@ var deployCmd = &cobra.Command{
 	Long:  `Manage deploy and rollback`,
 	Run: func(cmd *cobra.Command, args []string) {
 
-		socketPath := viper.GetString("cli.socket_path") // todo see if injectable
+		socketPath := config.GetValueFromConfig("cli.socket_path") // todo see if injectable
 
 		deployCliClient, err := cli.NewDeployClient(socketPath)
 		if err != nil {
