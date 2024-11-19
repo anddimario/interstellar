@@ -10,6 +10,7 @@ Application deployer
 - rollback
 - recovery from crash
 - cli
+- horizontal scaling
 
 ## Install and requirements
 
@@ -136,6 +137,40 @@ stateDiagram-v2
 ```
 
 **NOTE** The healthcheck will remove the backend from the backends list
+
+### Gossip
+
+```mermaid
+stateDiagram-v2
+  broadcast: Notify the peer to another one
+  gossip: Start gossip
+  random: Get random peers
+  notify_list: Notify peer list
+  update_list: Update peer list
+  auth: Auth
+  broadcast --> gossip
+  gossip --> random
+  random --> notify_list
+  notify_list --> auth
+  auth --> update_list
+  update_list --> gossip
+```
+
+### Horizontal scaling
+
+Needed in config:
+
+```toml
+[ha]
+secret = 'yoursecrethere'
+```
+
+Horizontal scaling isn't enabled by default, you must run:
+- Start the first node: `interstellar serve -e ADDRESS:PORT`
+- Start another node: `interstellar serve -e ADDRESS:PORT -b ADDRESS:PORT`
+- Commands info: `interstellar serve -h`
+
+**IMP** Communication isn't encrypted and it assumes that the nodes are in a vpc or another isolated environment, the secret is only use as **simple** auth.
 
 ## LICENSE
 

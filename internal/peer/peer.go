@@ -2,37 +2,46 @@ package peer
 
 import (
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net"
+	"strings"
 	"sync"
 	"time"
 )
 
 type Peer struct {
-	ID    string
-	Addr  string
-	Peers map[string]string // ID -> Addr
-	mu    sync.Mutex
+	ID       string
+	Addr     string
+	Peers    map[string]string // ID -> Addr
+	LastSeen map[string]time.Time
+	mu       sync.Mutex
+	Secret   string
 }
 
 var PeeringDone = make(chan bool)
 
-func NewPeer(id, addr string) *Peer {
+func NewPeer(addr string, secret string) *Peer {
+	id := generateRandomString(8)
 	return &Peer{
-		ID:    id,
-		Addr:  addr,
-		Peers: make(map[string]string),
+		ID:       id,
+		Addr:     addr,
+		Peers:    make(map[string]string),
+		LastSeen: make(map[string]time.Time),
+		Secret:   secret,
 	}
 }
+
 func (p *Peer) Gossip() {
-	t := time.NewTicker(5 * time.Second) // todo: make interval configurable?
+	t := time.NewTicker(10 * time.Second) // todo: make interval configurable?
 	defer t.Stop()
 
 	for {
 		select {
 		case <-t.C:
-			fmt.Println("Gossiping...")
+			// slog.Info("Gossiping", "addr", p.Addr)
 			p.mu.Lock()
+			p.cleanupPeerList()
 			peers := p.getRandomPeers(2) // Select 2 random peers to gossip with
 			p.mu.Unlock()
 
@@ -65,26 +74,33 @@ func (p *Peer) getRandomPeers(n int) []string {
 }
 
 func (p *Peer) sendPeerList(addr string) {
-	conn, err := net.Dial("udp", addr)
+	conn, err := net.Dial("udp4", addr)
 	if err != nil {
 		fmt.Println("Failed to connect to peer:", err)
 		return
 	}
 	defer conn.Close()
 
+	peerList := ""
+	for id, peerAddr := range p.Peers {
+		peerList += fmt.Sprintf("%s-%s,", id, peerAddr)
+	}
+	peerList = strings.TrimRight(peerList, ",")
+
 	// Serialize and send peers as JSON (or another format)
-	message := fmt.Sprintf("PEERS %s\n", p.Addr)
-    conn.Write([]byte(message))
+	// The last part of the message should be the secret
+	message := fmt.Sprintf("PEERS %s %s %s %s", p.ID, p.Addr, peerList, p.Secret)
+	conn.Write([]byte(message))
 }
 
 func (p *Peer) Listen() {
+	slog.Info("Listening for peers", "addr", p.Addr)
 	udpAddr, _ := net.ResolveUDPAddr("udp", p.Addr)
 	conn, _ := net.ListenUDP("udp", udpAddr)
 	defer conn.Close()
 
 	buf := make([]byte, 1024)
 	for {
-		fmt.Println("Listening...")
 		n, remoteAddr, err := conn.ReadFromUDP(buf)
 		if err != nil {
 			fmt.Println("Error receiving data:", err)
@@ -92,31 +108,82 @@ func (p *Peer) Listen() {
 		}
 
 		message := string(buf[:n])
-        fmt.Println("Received message:", message)
 		p.handleMessage(message, remoteAddr)
 	}
 
 }
 
 func (p *Peer) handleMessage(message string, addr *net.UDPAddr) {
-	fmt.Printf("Received message from %s: %s\n", addr.String(), message)
+	slog.Info("Received message", "addr", addr.String(), "message", message)
+
+	if len(message) < 6 {
+		slog.Error("Message too short", "message", message)
+		return
+	}
+
+	// Split message into parts, the first part is the message type (command)
+	parts := strings.Split(message, " ")
+
+	// Check if the message is from a valid peer
+	// The last part of the message should be the secret
+	if parts[len(parts)-1] != p.Secret {
+		slog.Error("Invalid secret", "addr", addr.String())
+		return
+	}
 
 	// Here we can parse message type and content
-	if message[:6] == "PEERS " {
-		newAddr := message[6:]
+	switch parts[0] {
+	case "PEERS":
+		// Get the peer name and address from the message
 		p.mu.Lock()
-		p.Peers[addr.String()] = newAddr
+		p.Peers[parts[1]] = parts[2]
 		p.mu.Unlock()
-		fmt.Println("Added peer:", newAddr)
+		// slog.Info("Added peer", "peer", parts[1], "addr", parts[2])
+		// Update the peer list with received peers
+		receivedPeers := strings.Split(parts[3], ",")
+		p.LastSeen[parts[1]] = time.Now()
+		p.mu.Lock()
+		for _, peer := range receivedPeers {
+			peerParts := strings.Split(peer, "-")
+			if len(peerParts) == 2 && peerParts[0] != p.ID { // Avoid to add the same peer to its own list
+				p.Peers[peerParts[0]] = peerParts[1]
+				p.LastSeen[peerParts[0]] = time.Now()
+			}
+		}
+		fmt.Printf("Updated peer list: %v\n", p.Peers)
+		p.mu.Unlock()
+	default:
+		slog.Error("Unknown message type", "type", parts[0])
 	}
 }
 
 func (p *Peer) Bootstrap(bootstrapAddr string) {
 	conn, err := net.Dial("udp", bootstrapAddr)
 	if err != nil {
-		fmt.Println("Could not connect to bootstrap peer:", err)
+		slog.Error("Could not connect to bootstrap peer", "addr", bootstrapAddr)
 		return
 	}
 	defer conn.Close()
+
 	p.sendPeerList(bootstrapAddr)
+}
+
+func (p *Peer) cleanupPeerList() {
+	// get the last seen variable for each peer and remove the ones that haven't been seen for a while
+	for id, lastSeen := range p.LastSeen {
+		if time.Since(lastSeen) > 30*time.Second { // todo: make timeout configurable?
+			delete(p.Peers, id)
+			delete(p.LastSeen, id)
+		}
+	}
+	// todo: if there are peers with the same address, but different IDs, remove the oldest one?
+}
+
+func generateRandomString(n int) string {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = letters[rand.Intn(len(letters))]
+	}
+	return string(b)
 }

@@ -2,19 +2,13 @@
 dev:
 	air -c .air.toml
 
-# https://hub.docker.com/r/hashicorp/http-echo/
-# example: make be port=8081 msg="Hello, World!"
-.PHONY: be
-be:
-	docker run -p $(port):$(port) hashicorp/http-echo -listen=:$(port) -text="$(msg)"
+.PHONY: test
+test:
+	go test ./...
 
-# .PHONY: test
-# test:
-# 	go test ./...
-
-# .PHONY: coverage
-# coverage:
-# 	go test -v -cover ./...
+.PHONY: coverage
+coverage:
+	go test -v -cover ./...
 
 .PHONY: load
 load:
@@ -23,3 +17,13 @@ load:
 .PHONY: vuln
 vuln:
 	govulncheck ./...
+
+# example: make leader name=peer1 udp_addr=localhost:9001
+.PHONY: leader
+leader:
+	go run main.go serve -e $(udp_addr)
+
+# example: make peer name=peer2 udp_addr=localhost:9002 bc=localhost:9001 addr=localhost:8081
+.PHONY: peer
+peer:
+	go run main.go serve -e $(udp_addr) -b $(bc) -a $(addr)

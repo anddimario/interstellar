@@ -25,7 +25,6 @@ import (
 var (
 	address      string
 	peerAddress  string
-	peerName     string
 	peerNodeAddr string
 )
 
@@ -83,8 +82,10 @@ var serveCmd = &cobra.Command{
 		go cliServerConfig.StartCliServer()
 
 		// Start peer with gossip protocol
-		if peerName != "" {
-			newPeer := peer.NewPeer(peerName, peerAddress)
+		if peerAddress != "" {
+			haSecret := config.GetValueFromConfig("ha.secret")
+
+			newPeer := peer.NewPeer(peerAddress, haSecret)
 			if peerNodeAddr != "" {
 				newPeer.Bootstrap(peerNodeAddr)
 			}
@@ -101,8 +102,9 @@ var serveCmd = &cobra.Command{
 		}
 
 		// Stop peer gossip
-		peer.PeeringDone <- true
-		// close(peer.PeeringDone)
+		if peerAddress == "" {
+			peer.PeeringDone <- true
+		}
 		// Stop healthcheck
 		balancer.HealthCheckDone <- true
 		// Stop monitor new releases on github
@@ -117,7 +119,6 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 
 	serveCmd.Flags().StringVarP(&address, "address", "a", "localhost:8080", "Address to listen on")
-	serveCmd.Flags().StringVarP(&peerAddress, "peer-address", "e", "localhost:8080", "Address to listen on")
-	serveCmd.Flags().StringVarP(&peerName, "peer-name", "n", "", "Peer name")
+	serveCmd.Flags().StringVarP(&peerAddress, "peer-address", "e", "", "Scaling Address to listen on for gossip protocol")
 	serveCmd.Flags().StringVarP(&peerNodeAddr, "peer-bootstrap", "b", "", "Peer node address for bootstrap")
 }

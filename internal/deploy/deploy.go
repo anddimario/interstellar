@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"math/rand"
 	"os/exec"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -177,7 +178,7 @@ func chooseNextReleasePort() (int, error) {
 	// Parse the command output to find the port
 	lines := strings.Split(out.String(), "\n")
 	for _, line := range lines {
-		if strings.Contains(line, string(randomNumber)) {
+		if strings.Contains(line, strconv.Itoa(randomNumber)) {
 			return chooseNextReleasePort()
 		}
 	}
