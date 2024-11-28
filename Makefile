@@ -6,6 +6,11 @@ dev:
 test:
 	go test ./...
 
+# Test race condition for mutex
+.PHONY: race
+race:
+	go test ./... --race
+
 .PHONY: coverage
 coverage:
 	go test -v -cover ./...
