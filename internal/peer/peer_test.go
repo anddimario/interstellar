@@ -9,7 +9,7 @@ import (
 
 func TestNewPeer(t *testing.T) {
     secret := "shared_secret"
-    peer := NewPeer("localhost:12345", secret)
+    peer := NewPeer("localhost:12345", secret, 0.5, 0.5)
 
     if peer.ID == "" {
         t.Error("Expected peer ID to be set")
@@ -17,14 +17,14 @@ func TestNewPeer(t *testing.T) {
     if peer.Addr != "localhost:12345" {
         t.Errorf("Expected peer address to be 'localhost:12345', got '%s'", peer.Addr)
     }
-    if peer.Secret != secret {
-        t.Errorf("Expected peer secret to be '%s', got '%s'", secret, peer.Secret)
+    if peer.Config.secret != secret {
+        t.Errorf("Expected peer secret to be '%s', got '%s'", secret, peer.Config.secret)
     }
 }
 
 func TestSendPeerList(t *testing.T) {
     secret := "shared_secret"
-    peer := NewPeer("localhost:12345", secret)
+    peer := NewPeer("localhost:12345", secret, 0.5, 0.5)
 
     // Start a dummy UDP server to receive the peer list
     addr := "localhost:12346"
@@ -51,7 +51,7 @@ func TestSendPeerList(t *testing.T) {
 
 func TestHandleMessage(t *testing.T) {
     secret := "shared_secret"
-    peer := NewPeer("localhost:12345", secret)
+    peer := NewPeer("localhost:12345", secret, 0.5, 0.5)
 
     // Simulate receiving a PEERS message
     message := fmt.Sprintf("PEERS peer1 localhost:12346 peer2-localhost:12347,peer3-localhost:12348 %s", secret)
@@ -74,7 +74,7 @@ func TestHandleMessage(t *testing.T) {
 
 func TestBootstrap(t *testing.T) {
     secret := "shared_secret"
-    peer := NewPeer("localhost:12345", secret)
+    peer := NewPeer("localhost:12345", secret, 0.5, 0.5)
 
     // Start a dummy UDP server to act as the bootstrap peer
     addr := "localhost:12346"
@@ -101,7 +101,7 @@ func TestBootstrap(t *testing.T) {
 
 func TestCleanupPeerList(t *testing.T) {
     secret := "shared_secret"
-    peer := NewPeer("localhost:12345", secret)
+    peer := NewPeer("localhost:12345", secret, 0.5, 0.5)
 
     // Add some peers with different last seen times
     peer.Peers["peer1"] = "localhost:12346"

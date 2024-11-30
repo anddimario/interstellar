@@ -10,25 +10,36 @@ import (
 	"time"
 )
 
+type PeerConfig struct {
+	secret   string
+	memThreshold float64
+	cpuThreshold float64
+}
+
 type Peer struct {
 	ID       string
 	Addr     string
 	Peers    map[string]string // ID -> Addr
 	LastSeen map[string]time.Time
 	mu       sync.Mutex
-	Secret   string
+	Config   *PeerConfig
 }
 
 var PeeringDone = make(chan bool)
 
-func NewPeer(addr string, secret string) *Peer {
+func NewPeer(addr string, secret string, memThreshold float64, cpuThreshold float64) *Peer {
 	id := generateRandomString(8)
+	peerConfig := &PeerConfig{
+		secret: secret,
+		memThreshold: memThreshold,
+		cpuThreshold: cpuThreshold,
+	}
 	return &Peer{
 		ID:       id,
 		Addr:     addr,
 		Peers:    make(map[string]string),
 		LastSeen: make(map[string]time.Time),
-		Secret:   secret,
+		Config:   peerConfig,
 	}
 }
 
@@ -46,51 +57,15 @@ func (p *Peer) Gossip() {
 			p.mu.Unlock()
 
 			for _, addr := range peers {
+				// add info if it's available to serve requests from other peer based on the load
+				go p.sendPeerAvailability(addr)
+				// send the peer list to the selected peer
 				go p.sendPeerList(addr)
 			}
 		case <-PeeringDone:
 			return
 		}
 	}
-}
-
-func (p *Peer) getRandomPeers(n int) []string {
-
-	fmt.Println("Peers:", p.Peers)
-	peerAddrs := make([]string, 0, len(p.Peers))
-	for _, addr := range p.Peers {
-		peerAddrs = append(peerAddrs, addr)
-	}
-
-	// Shuffle and select n peers
-	rand.Shuffle(len(peerAddrs), func(i, j int) {
-		peerAddrs[i], peerAddrs[j] = peerAddrs[j], peerAddrs[i]
-	})
-
-	if len(peerAddrs) < n {
-		return peerAddrs
-	}
-	return peerAddrs[:n]
-}
-
-func (p *Peer) sendPeerList(addr string) {
-	conn, err := net.Dial("udp4", addr)
-	if err != nil {
-		fmt.Println("Failed to connect to peer:", err)
-		return
-	}
-	defer conn.Close()
-
-	peerList := ""
-	for id, peerAddr := range p.Peers {
-		peerList += fmt.Sprintf("%s-%s,", id, peerAddr)
-	}
-	peerList = strings.TrimRight(peerList, ",")
-
-	// Serialize and send peers as JSON (or another format)
-	// The last part of the message should be the secret
-	message := fmt.Sprintf("PEERS %s %s %s %s", p.ID, p.Addr, peerList, p.Secret)
-	conn.Write([]byte(message))
 }
 
 func (p *Peer) Listen() {
@@ -113,6 +88,61 @@ func (p *Peer) Listen() {
 
 }
 
+func (p *Peer) sendPeerList(addr string) {
+	peerList := ""
+	for id, peerAddr := range p.Peers {
+		peerList += fmt.Sprintf("%s-%s,", id, peerAddr)
+	}
+	peerList = strings.TrimRight(peerList, ",")
+
+	// Serialize and send peers as JSON (or another format)
+	// The last part of the message should be the secret
+	message := fmt.Sprintf("PEERS %s %s %s %s", p.ID, p.Addr, peerList, p.Config.secret)
+
+	p.sendMessage(addr, message)
+}
+
+func (p *Peer) sendMessage(addr string, message string) {
+	conn, err := net.Dial("udp4", addr)
+	if err != nil {
+		fmt.Println("Failed to connect to peer:", err)
+		return
+	}
+	defer conn.Close()
+
+	conn.Write([]byte(message))
+}
+
+func (p *Peer) sendPeerAvailability(addr string) {
+	canServeExternalRequests := IsAvailableToServe(p.Config.memThreshold, p.Config.cpuThreshold)
+	if canServeExternalRequests {
+		message := fmt.Sprintf("AVAILABLE %s %s %s", p.ID, p.Addr, p.Config.secret)
+		p.sendMessage(addr, message)
+	} else {
+		message := fmt.Sprintf("UNAVAILABLE %s %s %s", p.ID, p.Addr, p.Config.secret)
+		p.sendMessage(addr, message)
+	}
+}
+
+func (p *Peer) getRandomPeers(n int) []string {
+
+	fmt.Println("Peers:", p.Peers)
+	peerAddrs := make([]string, 0, len(p.Peers))
+	for _, addr := range p.Peers {
+		peerAddrs = append(peerAddrs, addr)
+	}
+
+	// Shuffle and select n peers
+	rand.Shuffle(len(peerAddrs), func(i, j int) {
+		peerAddrs[i], peerAddrs[j] = peerAddrs[j], peerAddrs[i]
+	})
+
+	if len(peerAddrs) < n {
+		return peerAddrs
+	}
+	return peerAddrs[:n]
+}
+
 func (p *Peer) handleMessage(message string, addr *net.UDPAddr) {
 	slog.Info("Received message", "addr", addr.String(), "message", message)
 
@@ -126,7 +156,7 @@ func (p *Peer) handleMessage(message string, addr *net.UDPAddr) {
 
 	// Check if the message is from a valid peer
 	// The last part of the message should be the secret
-	if parts[len(parts)-1] != p.Secret {
+	if parts[len(parts)-1] != p.Config.secret {
 		slog.Error("Invalid secret", "addr", addr.String())
 		return
 	}
@@ -152,8 +182,12 @@ func (p *Peer) handleMessage(message string, addr *net.UDPAddr) {
 		}
 		fmt.Printf("Updated peer list: %v\n", p.Peers)
 		p.mu.Unlock()
+	case "AVAILABLE":
+	// todo
+	case "UNAVAILABLE":
+	// todo
 	default:
-		slog.Error("Unknown message type", "type", parts[0])
+		slog.Error("Unknown message", "type", parts[0])
 	}
 }
 
