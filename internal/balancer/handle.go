@@ -44,14 +44,14 @@ func HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	backend, err := url.Parse(handlerInfo.backend)
+	backendUrlParsed, err := url.Parse(handlerInfo.backend)
 	if err != nil {
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return
 	}
 
 	// Create a new request to the backend server
-	req, err := http.NewRequest(r.Method, backend.ResolveReference(r.URL).String(), r.Body)
+	req, err := http.NewRequest(r.Method, backendUrlParsed.ResolveReference(r.URL).String(), r.Body)
 	if err != nil {
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 		return

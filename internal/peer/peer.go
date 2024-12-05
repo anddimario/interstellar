@@ -1,6 +1,7 @@
 package peer
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand"
@@ -16,6 +17,8 @@ type PeerConfig struct {
 	cpuThreshold float64
 }
 
+
+
 type Peer struct {
 	ID       string
 	Addr     string
@@ -25,7 +28,11 @@ type Peer struct {
 	Config   *PeerConfig
 }
 
-var PeeringDone = make(chan bool)
+var (
+	PeeringDone = make(chan bool)
+	AvailablePeers = make(map[string]string)
+	AvailablePeersMu sync.Mutex
+)
 
 func NewPeer(addr string, secret string, memThreshold float64, cpuThreshold float64) *Peer {
 	id := generateRandomString(8)
@@ -57,10 +64,10 @@ func (p *Peer) Gossip() {
 			p.mu.Unlock()
 
 			for _, addr := range peers {
-				// add info if it's available to serve requests from other peer based on the load
-				go p.sendPeerAvailability(addr)
 				// send the peer list to the selected peer
 				go p.sendPeerList(addr)
+				// add info if it's available to serve requests from other peer based on the load
+				go p.sendPeerAvailability(addr)
 			}
 		case <-PeeringDone:
 			return
@@ -95,7 +102,6 @@ func (p *Peer) sendPeerList(addr string) {
 	}
 	peerList = strings.TrimRight(peerList, ",")
 
-	// Serialize and send peers as JSON (or another format)
 	// The last part of the message should be the secret
 	message := fmt.Sprintf("PEERS %s %s %s %s", p.ID, p.Addr, peerList, p.Config.secret)
 
@@ -183,9 +189,13 @@ func (p *Peer) handleMessage(message string, addr *net.UDPAddr) {
 		fmt.Printf("Updated peer list: %v\n", p.Peers)
 		p.mu.Unlock()
 	case "AVAILABLE":
-	// todo
+		AvailablePeersMu.Lock()
+		AvailablePeers[parts[1]] = parts[2]
+		AvailablePeersMu.Unlock()
 	case "UNAVAILABLE":
-	// todo
+		AvailablePeersMu.Lock()
+		delete(AvailablePeers, parts[1])
+		AvailablePeersMu.Unlock()
 	default:
 		slog.Error("Unknown message", "type", parts[0])
 	}
@@ -211,6 +221,26 @@ func (p *Peer) cleanupPeerList() {
 		}
 	}
 	// todo: if there are peers with the same address, but different IDs, remove the oldest one?
+}
+
+func GetRandomAvailablePeer() (*string, error) {
+	// Get a random available peer to send the request
+	AvailablePeersMu.Lock()
+	defer AvailablePeersMu.Unlock()
+	if len(AvailablePeers) == 0 {
+		return nil, errors.New("no available peers")
+	}
+
+    // Convert map keys to a slice
+    keys := make([]string, 0, len(AvailablePeers))
+    for key := range AvailablePeers {
+        keys = append(keys, key)
+    }
+
+    // Select a random key
+    randomKey := keys[rand.Intn(len(keys))]
+	chosenPeer := AvailablePeers[randomKey]
+	return &chosenPeer, nil
 }
 
 func generateRandomString(n int) string {

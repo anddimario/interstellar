@@ -10,7 +10,6 @@ import (
 	"log/slog"
 	"net/http"
 	"os/signal"
-	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -85,14 +84,8 @@ var serveCmd = &cobra.Command{
 		// Start peer with gossip protocol
 		if peerAddress != "" {
 			haSecret := config.GetValueFromConfig("ha.secret")
-			memThreshold, err := strconv.ParseFloat(config.GetValueFromConfig("ha.mem_threshold"), 64)
-			if err != nil { // todo: see if panic is better here
-				slog.Error("Error parsing mem_threshold", "err", err)
-			}
-			cpuThreshold, err := strconv.ParseFloat(config.GetValueFromConfig("ha.cpu_threshold"), 64)
-			if err != nil { // todo: see if panic is better here
-				slog.Error("Error parsing cpu_threshold", "err", err)
-			}
+			memThreshold := viper.GetFloat64("ha.mem_threshold")
+			cpuThreshold := viper.GetFloat64("ha.cpu_threshold")
 
 			newPeer := peer.NewPeer(peerAddress, haSecret, memThreshold, cpuThreshold)
 			if peerNodeAddr != "" {
