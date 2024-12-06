@@ -11,12 +11,12 @@ import (
 	"strings"
 	"syscall"
 
-	viper "github.com/spf13/viper"
+	"github.com/anddimario/interstellar/internal/config"
 )
 
 func GetProcessesPID() ([]int, error) {
 	// Get the list of processes from the balancer
-	backends := viper.GetStringSlice("balancer.backends") // @todo: see if inject
+	backends := config.K.Strings("balancer.backends") // @todo: see if inject
 
 	// Create a slice to store the PIDs of the processes
 	pids := make([]int, 0)

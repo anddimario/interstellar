@@ -2,44 +2,64 @@ package config
 
 import (
 	"fmt"
+	"os"
 
-	viper "github.com/spf13/viper"
+	"github.com/knadh/koanf/parsers/toml"
 )
 
 func StoreValueInConfig[T any](name string, value T) {
-	
-    // Set a configuration value
-    viper.Set(name, value)
 
-    writeToConfigFile()
+	// Set a configuration value
+	K.Set(name, value)
+
+	writeToConfigFile()
 
 }
 
 func DeleteValueInConfig(name string) {
-	// IMP: there's a workaround here, because it does not seem possible to delete a key in viper 
+	K.Delete(name)
 
-    // Set a configuration value
-    viper.Set(name, false)
-
-    writeToConfigFile()
+	writeToConfigFile()
 }
 
-func GetValueFromConfig(name string) string {
-    
-    // Get a configuration value
-    value := viper.GetString(name)
-    return value
+// func GetValueFromConfig(key string, valueType string) (interface{}, error) {
+//     if !k.Exists(key) {
+//         return nil, fmt.Errorf("key '%s' does not exist", key)
+//     }
 
-}
+//     switch valueType {
+//     case "string":
+//         return k.String(key), nil
+//     case "int":
+//         return k.Int(key), nil
+//     case "float64":
+//         return k.Float64(key), nil
+//     case "bool":
+//         return k.Bool(key), nil
+//     case "strings":
+//         return k.Strings(key), nil
+//     case "ints":
+//         return k.Ints(key), nil
+//     case "duration":
+//         return k.Duration(key), nil
+//     default:
+//         return nil, fmt.Errorf("unsupported value type '%s'", valueType)
+//     }
+
+// }
 
 func writeToConfigFile() {
-    
-    // Write the configuration to the file
-    viper.AddConfigPath(".")      // Path to look for the config file in the current directory
-    err := viper.WriteConfigAs("config.toml")
-    if err != nil {
-        fmt.Printf("Error writing config file: %s\n", err)
-        return
-    }
 
-}   
+	// Save the updated configuration back to the file
+	configBytes, err := K.Marshal(toml.Parser())
+	if err != nil {
+		fmt.Printf("Error marshaling config: %v\n", err)
+		return
+	}
+
+	if err := os.WriteFile("config.toml", configBytes, 0644); err != nil {
+		fmt.Printf("Error writing config file: %v\n", err)
+		return
+	}
+
+}

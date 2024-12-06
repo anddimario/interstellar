@@ -48,9 +48,9 @@ func (s *InfoService) GetInfo(req InfoRequest, res *InfoResponse) error {
 	var err error
 	switch req.Query {
 	case "version":
-		repo := config.GetValueFromConfig("deploy.repo")
+		repo := config.K.String("deploy.repo")
 		versionConfigPath := fmt.Sprintf("%s.%s", repo, "last_release")
-		res.Info = config.GetValueFromConfig(versionConfigPath)
+		res.Info = config.K.String(versionConfigPath)
 	case "deploy":
 		deployIsInProgress := deploy.CheckIfDeployInProgress()
 		if deployIsInProgress {

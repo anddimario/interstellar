@@ -3,7 +3,6 @@ package config
 import (
 	"time"
 
-	"github.com/spf13/viper"
 )
 
 type DeployConfig struct {
@@ -31,14 +30,14 @@ type RecoveryConfig struct {
 func PrepareDeployConfig() DeployConfig {
 
 	// Start monitor new releases on github
-	checkReleaseInterval := viper.GetDuration("deploy.check_release_interval")
-	repo := GetValueFromConfig("deploy.repo")
-	releasePath := GetValueFromConfig("deploy.release_path")
-	assetName := GetValueFromConfig("deploy.asset_name")
-	executableCommand := GetValueFromConfig("deploy.executable_command")
-	executableEnv := viper.GetStringSlice("deploy.executable_env")
-	executableArgs := viper.GetStringSlice("deploy.executable_args")
-	deployType := GetValueFromConfig("deploy.type")
+	checkReleaseInterval := K.Duration("deploy.check_release_interval")
+	repo := K.String("deploy.repo")
+	releasePath := K.String("deploy.release_path")
+	assetName := K.String("deploy.asset_name")
+	executableCommand := K.String("deploy.executable_command")
+	executableEnv := K.Strings("deploy.executable_env")
+	executableArgs := K.Strings("deploy.executable_args")
+	deployType := K.String("deploy.type")
 
 	return DeployConfig{
 		CheckReleaseInterval: checkReleaseInterval,
@@ -54,8 +53,8 @@ func PrepareDeployConfig() DeployConfig {
 
 func PrepareReleaseConfig(repo string) ReleaseConfig {
 
-	lastRelease := GetValueFromConfig(repo + ".last_release")
-	ignore := GetValueFromConfig(repo + ".ignore")
+	lastRelease := K.String(repo + ".last_release")
+	ignore := K.String(repo + ".ignore")
 
 	return ReleaseConfig{
 		LastRelease: lastRelease,
@@ -65,9 +64,9 @@ func PrepareReleaseConfig(repo string) ReleaseConfig {
 
 func PrepareRecoveryConfig() RecoveryConfig {
 
-	inProgress := viper.GetBool("deploy.in_progress")
-	newProcessPID := viper.GetInt("deploy.new_process_pid")
-	newProcessPort := viper.GetInt("deploy.new_process_port")
+	inProgress := K.Bool("deploy.in_progress")
+	newProcessPID := K.Int("deploy.new_process_pid")
+	newProcessPort := K.Int("deploy.new_process_port")
 
 	return RecoveryConfig{
 		DeployInProgress: inProgress,

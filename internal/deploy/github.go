@@ -46,14 +46,14 @@ func getLastRelease(deployConfig config.DeployConfig) {
 	releaseInfo := strings.Fields(outputString)
 	releaseVersion := releaseInfo[0]
 
-	lastDeployedRelease := config.GetValueFromConfig(deployConfig.Repo + ".last_release")
+	lastDeployedRelease := config.K.String(deployConfig.Repo + ".last_release")
 
 	if lastDeployedRelease == releaseVersion {
 		return
 	}
 
 	// Check if the release is in ignore after a rollback
-	ignoreRelease := config.GetValueFromConfig(deployConfig.Repo + ".ignore") // todo see if injectable
+	ignoreRelease := config.K.String(deployConfig.Repo + ".ignore") // todo see if injectable
 	if ignoreRelease == releaseVersion {
 		slog.Error("Release in ignore, skipping deploy", "releaseVersion", releaseVersion)
 		return

@@ -6,7 +6,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/anddimario/interstellar/internal/config"
+	// "github.com/anddimario/interstellar/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -30,7 +30,8 @@ func Execute() {
 }
 
 func init() {
-    cobra.OnInitialize(config.InitConfig)
+	// todo: see if we can remove this, because it is already called in serve.go
+    // cobra.OnInitialize(config.InitConfig)
 
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

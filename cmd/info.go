@@ -1,4 +1,3 @@
-
 package cmd
 
 import (
@@ -22,7 +21,7 @@ var infoCmd = &cobra.Command{
 	Short: "Information about the application",
 	Long:  `Information about the application`,
 	Run: func(cmd *cobra.Command, args []string) {
-		socketPath := config.GetValueFromConfig("cli.socket_path") // todo see if injectable
+		socketPath := config.K.String("cli.socket_path") // todo see if injectable
 
 		infoCliClient, err := cli.NewInfoClient(socketPath)
 		if err != nil {

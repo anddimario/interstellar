@@ -13,7 +13,6 @@ import (
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
 	config "github.com/anddimario/interstellar/internal/config"
-	"github.com/spf13/viper"
 )
 
 type DeployStatus struct {
@@ -56,7 +55,7 @@ func canaryDeploy(processPort int, newProcessPID int, repo string, releaseVersio
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
 
 	// wait for the new version to start
-	waitStartup := viper.GetInt("canary.wait_startup_in_sec") // @todo: see if inject
+	waitStartup := config.K.Int("canary.wait_startup_in_sec") // @todo: see if inject
 	time.Sleep(time.Duration(waitStartup) * time.Second)
 
 	// see if the new version it's healthy (if not close the new version and go to notify)
@@ -88,7 +87,7 @@ func canaryDeploy(processPort int, newProcessPID int, repo string, releaseVersio
 	addBackendToConfig(processPort)
 
 	// use a timer timeout that wait until the window time is over and compleate the deploy
-	canaryWaitWindow := viper.GetDuration("canary.wait_window_in_min") // @todo: see if inject
+	canaryWaitWindow := config.K.Duration("canary.wait_window_in_min") // @todo: see if inject
 	t := time.NewTimer(canaryWaitWindow * time.Minute)
 
 	<-t.C
@@ -104,8 +103,8 @@ func canaryDeploy(processPort int, newProcessPID int, repo string, releaseVersio
 func blueGreenDeploy(processPort int, newProcessPID int, repo string, releaseVersion string) {
 
 	// wait for positive health check
-	positiveHealthCheck := viper.GetInt("bluegreen.positive_healthchecks") // @todo: see if inject
-	healthCheckInterval := viper.GetDuration("healthcheck.interval")       // @todo: see if inject
+	positiveHealthCheck := config.K.Int("bluegreen.positive_healthchecks") // @todo: see if inject
+	healthCheckInterval := config.K.Duration("healthcheck.interval")       // @todo: see if inject
 	time.Sleep(time.Duration(positiveHealthCheck) * time.Duration(healthCheckInterval) * time.Second)
 
 	newBackend := fmt.Sprintf("http://localhost:%d", processPort)
@@ -189,7 +188,7 @@ func chooseNextReleasePort() (int, error) {
 func addBackendToConfig(port int) {
 	backendUrl := fmt.Sprintf("http://localhost:%d", port)
 
-	backends := viper.GetStringSlice("balancer.backends")
+	backends := config.K.Strings("balancer.backends")
 	backends = append(backends, backendUrl)
 
 	// add backend to balancer and config

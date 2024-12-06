@@ -13,7 +13,6 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 
 	balancer "github.com/anddimario/interstellar/internal/balancer"
 	"github.com/anddimario/interstellar/internal/cli"
@@ -46,7 +45,7 @@ var serveCmd = &cobra.Command{
 
 		// Define server
 		srv := &http.Server{}
-		srv.Addr = viper.GetString("balancer.address")
+		srv.Addr = config.K.String("balancer.address")
 		if address != "" {
 			srv.Addr = address
 		}
@@ -66,10 +65,10 @@ var serveCmd = &cobra.Command{
 
 		// Start healthcheck
 		healthCheckConfig := balancer.HealthCheckConfig{
-			Interval: viper.GetDuration("healthcheck.interval"),
-			Path:     viper.GetString("healthcheck.path"),
+			Interval: config.K.Duration("healthcheck.interval"),
+			Path:     config.K.String("healthcheck.path"),
 		}
-		go healthCheckConfig.InitBackendsFromConfig(viper.GetStringSlice("balancer.backends"))
+		go healthCheckConfig.InitBackendsFromConfig(config.K.Strings("balancer.backends"))
 
 		// Start Deploy process
 		deployConfig := config.PrepareDeployConfig()
@@ -77,15 +76,15 @@ var serveCmd = &cobra.Command{
 
 		// Cli server
 		cliServerConfig := cli.CliConfig{
-			SocketPath: viper.GetString("cli.socket_path"),
+			SocketPath: config.K.String("cli.socket_path"),
 		}
 		go cliServerConfig.StartCliServer()
 
 		// Start peer with gossip protocol
 		if peerAddress != "" {
-			haSecret := config.GetValueFromConfig("ha.secret")
-			memThreshold := viper.GetFloat64("ha.mem_threshold")
-			cpuThreshold := viper.GetFloat64("ha.cpu_threshold")
+			haSecret := config.K.String("ha.secret")
+			memThreshold := config.K.Float64("ha.mem_threshold")
+			cpuThreshold := config.K.Float64("ha.cpu_threshold")
 
 			newPeer := peer.NewPeer(peerAddress, haSecret, memThreshold, cpuThreshold)
 			if peerNodeAddr != "" {

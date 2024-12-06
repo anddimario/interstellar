@@ -8,7 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/spf13/viper"
+	"github.com/anddimario/interstellar/internal/config"
 )
 
 var (
@@ -102,7 +102,7 @@ func ManageCanaryDeployInProgress() {
 	muCanary.Lock()
 	defer muCanary.Unlock()
 
-	newReleaseQuota := viper.GetInt("canary.new_release_quota") // @todo inject this value to avoid viper at each request
+	newReleaseQuota := config.K.Int("canary.new_release_quota") // @todo inject this value?
 
 	ResultCanary = CanaryInfo{
 		NewReleaseQuota:             newReleaseQuota,
